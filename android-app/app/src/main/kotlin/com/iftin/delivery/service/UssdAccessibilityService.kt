@@ -80,6 +80,9 @@ class UssdAccessibilityService : AccessibilityService() {
         const val KEY_LAST_USSD_RESPONSE = "last_ussd_response"
         const val KEY_LAST_USSD_RESPONSE_TIME = "last_ussd_response_time"
         const val KEY_USSD_SESSION_ID = "ussd_session_id"  // Session ID to bind responses
+        // In-app diagnostics for PIN entry (visible without adb logcat)
+        const val KEY_LAST_PIN_DEBUG = "last_pin_debug_snapshot"
+        const val KEY_LAST_PIN_DEBUG_TIME = "last_pin_debug_time"
         
         // Button texts to auto-click (Somali and English) - EXPANDED LIST
         private val CONFIRM_BUTTONS = listOf(
@@ -291,23 +294,28 @@ class UssdAccessibilityService : AccessibilityService() {
 
         val selectionIndex = candidates.indexOf(preferred)
         val activePackage = root.packageName?.toString().orEmpty()
-        val isSomtelSimToolkitDialog = activePackage.contains("stk", ignoreCase = true) ||
-            activePackage.contains("toolkit", ignoreCase = true) ||
-            activePackage.contains("somtel", ignoreCase = true)
+        // Detect whether a real editable dialog field is present.
+        // If yes — write into the field FIRST (ACTION_SET_TEXT → paste). Gesture taps on
+        // dialer/IME digits while the dialog is open send DTMF tones and corrupt the
+        // EditText input, which is what produces "Invalid PIN format" from Somtel/Jeeb.
+        val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
-        methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
-            focusEditableField(node, requireAccessibilityFocus = true)
-            dispatchGestureKeypad(root, pin)
-        }
-        methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
-            writeWithClipboardPaste(node, pin, requireFocus = true)
-        }
-        if (!isSomtelSimToolkitDialog) {
+        if (hasRealEditableField) {
+            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send)
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
+            methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
+                writeWithClipboardPaste(node, pin, requireFocus = true)
+            }
+            Log.d(TAG, "🧭 PIN path = editable-first (EditText present, package=$activePackage)")
         } else {
-            Log.d(TAG, "🚫 ACTION_SET_TEXT fallback disabled for Somtel/STK package=$activePackage")
+            // Pure dialpad screen — last-resort gesture taps on dialer digits
+            methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
+                focusEditableField(node, requireAccessibilityFocus = true)
+                dispatchGestureKeypad(root, pin)
+            }
+            Log.d(TAG, "🧭 PIN path = gesture-only (no EditText, package=$activePackage)")
         }
 
         var ok = false
@@ -328,10 +336,12 @@ class UssdAccessibilityService : AccessibilityService() {
                     intendedPin = cleanPin,
                     totalCandidates = candidates.size,
                     selectedIndex = selectionIndex,
-                    writeAttempted = wrote
+                    writeAttempted = wrote,
+                    hasRealEditableField = hasRealEditableField
                 )
                 lastPinWriteDiagnostics = verification
                 logPinWriteDiagnostics(verification)
+                persistPinDebugSnapshot(verification, activePackage, hasRealEditableField, candidates.size)
                 if (verification.exactMatch) {
                     pinFieldFocusedForSession = verification.isFocused || verification.isAccessibilityFocused
                     pinFieldEditableForSession = verification.isEditable && verification.isEnabled && verification.isVisible
@@ -347,12 +357,12 @@ class UssdAccessibilityService : AccessibilityService() {
             pinFilledForSession = true
             pinSetCount++
             lastPinWriteAtMs = System.currentTimeMillis()
-            // Suppress the CONTENT_CHANGED echo from ACTION_SET_TEXT
-            // Longer suppression covers dispatchGesture tap queue (4 × 150ms) + IME settle
-            setTextSuppressUntilMs = System.currentTimeMillis() + 2500L
+            // Suppress the CONTENT_CHANGED echo from the write action.
+            // 1800ms covers both SET_TEXT echo and gesture tap queue + IME settle.
+            setTextSuppressUntilMs = System.currentTimeMillis() + 1800L
             Log.d(
                 TAG,
-                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=2500ms, method=${lastPinWriteDiagnostics?.method})"
+                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1800ms, method=${lastPinWriteDiagnostics?.method})"
             )
         } else {
             pinWriteFailedForSession = true
