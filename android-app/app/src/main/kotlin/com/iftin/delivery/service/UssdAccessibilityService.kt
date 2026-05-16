@@ -1203,12 +1203,16 @@ class UssdAccessibilityService : AccessibilityService() {
             for (buttonText in sendButtons) {
                 val nodes = root.findAccessibilityNodeInfosByText(buttonText)
                 for (node in nodes) {
-                    if (isClickableButton(node)) {
+                    val nodeText = node.text?.toString()?.trim().orEmpty()
+                    val contentDesc = node.contentDescription?.toString()?.trim().orEmpty()
+                    val label = nodeText.ifBlank { contentDesc }
+                    val looksLikeKeypadKey = label.length == 1 && label.firstOrNull()?.isDigit() == true
+                    if (isClickableButton(node) && !looksLikeKeypadKey) {
                         val clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                         if (clicked) {
                             clickCount++
                             lastClickTime = System.currentTimeMillis()
-                            Log.d(TAG, "✅ Clicked '$buttonText' after PIN entry (click #$clickCount)")
+                            Log.d(TAG, "✅ Clicked '$buttonText' after PIN entry (click #$clickCount label='$label')")
                             startMultiDialogListener()
                             notifyClickComplete()
                             node.recycle()
