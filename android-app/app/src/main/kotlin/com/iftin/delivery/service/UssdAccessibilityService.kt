@@ -519,7 +519,7 @@ class UssdAccessibilityService : AccessibilityService() {
             failureReason = when {
                 !writeAttempted -> "write_action_failed"
                 !refreshed -> "refresh_failed"
-                actual != intendedPin -> "value_mismatch:$actual"
+                actual != intendedPin -> "value_mismatch_len:${actual.length}"
                 else -> null
             }
         )
