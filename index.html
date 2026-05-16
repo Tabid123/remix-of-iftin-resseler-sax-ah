@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Anti-flash + Android WebView detection (BEFORE React loads)
+      (function(){
+        // Anti-flash style
+        var s=document.createElement('style');
+        s.id='anti-flash';
+        s.textContent='html,body,#root{background:linear-gradient(135deg,#0099ff 0%,#0066cc 100%)!important;min-height:100vh!important}';
+        document.head.appendChild(s);
+        
+        // Detect Android WebView using User-Agent (works with Capacitor remote URL)
+        var ua = navigator.userAgent || '';
+        var isAndroidWebView = /Android/.test(ua) && ua.indexOf('wv') > -1;
+        if (isAndroidWebView) {
+          document.documentElement.style.setProperty('--effective-safe-area-top', '0px');
+        } else {
+          // iOS/Web: Use env() safe area
+          document.documentElement.style.setProperty(
+            '--effective-safe-area-top', 
+            'env(safe-area-inset-top, 0px)'
+          );
+        }
+      })();
+
+      // Aggressive iOS/WKWebView blank-screen watchdog. Runs immediately in <head>,
+      // before deferred/module React code, so a frozen white body can recover itself.
+      (function(){
+        // Disable aggressive reload watchdog in Lovable preview / iframes —
+        // it races against Vite HMR and traps the app in an infinite reload loop.
+        var host = (location && location.hostname) || '';
+        var inIframe = false;
+        try { inIframe = window.self !== window.top; } catch (e) { inIframe = true; }
+        var isPreview = inIframe ||
+          host.indexOf('lovableproject.com') > -1 ||
+          host.indexOf('lovable.app') > -1 ||
+          host.indexOf('id-preview--') > -1 ||
+          host === 'localhost' || host === '127.0.0.1';
+        if (isPreview) {
+          window.__iftinHasRenderedContent = function(){ return true; };
+          window.__iftinHardReloadIfBlank = function(){};
+          return;
+        }
+
+        var HARD_RELOAD_KEY = '__iftin_hard_reload_at__';
+        var reloading = false;
+        function rootHasAppContent() {
+          var root = document.getElementById('root');
+          if (!root) return false;
+          if (document.getElementById('app-render-sentinel')) return true;
+          var cloneText = (root.innerText || '').replace(/\s+/g, ' ').trim();
+          return !!window.__APP_MOUNTED__ || (!!cloneText && !/^Internet ma jiro\.|^Sii wad Offline Mode$/.test(cloneText));
+        }
+
+        function looksWhiteOrEmpty() {
+          var body = document.body;
+          if (!body) return false;
+          if (rootHasAppContent()) return false;
+          var root = document.getElementById('root');
+          var bodyText = (body.innerText || '').replace(/\s+/g, ' ').trim();
+          var hasVisibleDom = !!(root && root.children && root.children.length > 0) || body.children.length > 1 || bodyText.length > 0;
+          // NOTE: do NOT check getComputedStyle(body).backgroundColor — gradient backgrounds
+          // report rgba(0,0,0,0) which would falsely trigger reloads forever.
+          return !hasVisibleDom;
+        }
+
+        function hardReload(reason) {
+          if (reloading || rootHasAppContent()) return;
+          reloading = true;
+          try { sessionStorage.setItem(HARD_RELOAD_KEY, String(Date.now())); } catch(e) {}
+          console.warn('[iOS Watchdog] hard reload:', reason);
+          window.location.href = window.location.href;
+        }
+
+        window.__iftinHasRenderedContent = rootHasAppContent;
+        window.__iftinHardReloadIfBlank = function(reason) {
+          if (!rootHasAppContent()) hardReload(reason || 'blank');
+        };
+
+        setInterval(function(){
+          if (document.visibilityState === 'hidden') return;
+          if (looksWhiteOrEmpty()) hardReload('empty-white-body');
+        }, 2000);
+
+        setTimeout(function(){
+          if (!rootHasAppContent()) hardReload('no-content-after-5s');
+        }, 5000);
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-visual" />
+    <title>Iftin Internet - Iftin ka iibso Internet adigoona qof wicin, waqti kasta, xitaa offline!</title>
+    <meta name="description" content="Get the fastest and most reliable internet services. Buy your internet package here now with secure and easy payment options.">
+    <meta name="author" content="Duuliye Team" />
+
+    
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e5d2f773-3e5d-4d8b-ad23-36c6035edc19?Expires=1774168415&amp;GoogleAccessId=go-api-on-aws%40gpt-engineer-390607.iam.gserviceaccount.com&amp;Signature=b%2B74pGXzirnv%2FtXomd9HzfkVVSmFYhjzhzdXzpLiThoYZ05gWo4qSjJYi%2Bw%2FUto8XPey1HRIoJZ14qORbzLbVhAXi6rOe%2B7%2BDsDj7a2%2FsiiO1VONfVLkofpsK8bDSJcetKYrgMzuwHmgJ1HmcLgQi4H0vH43nlqcp9rbxrULV%2Bh%2FrKeRKoLp0rEkDcxHgwAn4EST2VUwdTAr4juvjypcd2%2FUDLMhPW98MeWybRnhMA8hY84x60lyRpLcchqzSuyl5i%2BcmqL2Zr0d2%2Bd48rpiq99QEOJ9lt33IovuNoeayyN%2FOjqezuSRnL93Js%2FjxY3nbiupN7BYAMEpEsch0EsgRg%3D%3D">
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@lovable_dev" />
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e5d2f773-3e5d-4d8b-ad23-36c6035edc19?Expires=1774168415&amp;GoogleAccessId=go-api-on-aws%40gpt-engineer-390607.iam.gserviceaccount.com&amp;Signature=b%2B74pGXzirnv%2FtXomd9HzfkVVSmFYhjzhzdXzpLiThoYZ05gWo4qSjJYi%2Bw%2FUto8XPey1HRIoJZ14qORbzLbVhAXi6rOe%2B7%2BDsDj7a2%2FsiiO1VONfVLkofpsK8bDSJcetKYrgMzuwHmgJ1HmcLgQi4H0vH43nlqcp9rbxrULV%2Bh%2FrKeRKoLp0rEkDcxHgwAn4EST2VUwdTAr4juvjypcd2%2FUDLMhPW98MeWybRnhMA8hY84x60lyRpLcchqzSuyl5i%2BcmqL2Zr0d2%2Bd48rpiq99QEOJ9lt33IovuNoeayyN%2FOjqezuSRnL93Js%2FjxY3nbiupN7BYAMEpEsch0EsgRg%3D%3D">
+    
+  
+  
+  
+  <link rel="icon" type="image/png" href="/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  
+  
+  
+    
+    <meta name="theme-color" content="#0099ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Web Splash Screen Styles -->
+    <style>
+      /* Default safe area to 0 - JS will set for iOS/Web */
+      :root { --effective-safe-area-top: 0px; }
+      
+      #initial-splash {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(135deg, #0099ff 0%, #0066cc 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      .splash-logo {
+        width: 150px;
+        height: 150px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        margin-top: 40px;
+        border: 4px solid rgba(255,255,255,0.3);
+        border-top: 4px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.9; }
+      }
+    </style>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta property="og:title" content="Iftin Internet - Iftin ka iibso Internet adigoona qof wicin, waqti kasta, xitaa offline!">
+  <meta name="twitter:title" content="Iftin Internet - Iftin ka iibso Internet adigoona qof wicin, waqti kasta, xitaa offline!">
+  <meta property="og:description" content="Get the fastest and most reliable internet services. Buy your internet package here now with secure and easy payment options.">
+  <meta name="twitter:description" content="Get the fastest and most reliable internet services. Buy your internet package here now with secure and easy payment options.">
+</head>
+
+  <body style="background:linear-gradient(135deg,#0099ff 0%,#0066cc 100%);margin:0;padding:0;min-height:100vh;">
+    <div id="root" style="background:linear-gradient(135deg,#0099ff 0%,#0066cc 100%);min-height:100vh;">
+      <!-- Initial Web Splash Screen - replaced by React when loaded -->
+      <div id="initial-splash">
+        <img src="/images/iftin-splash-logo.png" alt="Iftin Internet" class="splash-logo">
+        <div class="loading-spinner"></div>
+        <!-- Native HTML offline fallback button — works even if React JS fails to boot offline (iOS WKWebView). -->
+        <div id="native-offline-fallback" style="display:none;margin-top:32px;text-align:center;color:#fff;max-width:300px;padding:0 16px;">
+          <p style="font-size:14px;line-height:1.5;margin:0 0 16px 0;opacity:0.95;">
+            Internet ma jiro. Waxaad sii isticmaali kartaa Offline Mode.
+          </p>
+          <button id="native-offline-btn" style="background:#fff;color:#0066cc;border:0;padding:14px 24px;border-radius:10px;font-weight:700;font-size:16px;cursor:pointer;width:100%;">
+            Sii wad Offline Mode
+          </button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Silent boot watchdog: if React doesn't mount in time, show native offline button
+      // so iOS users (where SW often fails offline in WKWebView) are NEVER stuck on splash.
+      (function () {
+        var WATCHDOG_MS = 6000;
+        var RELOAD_KEY = '__iftin_boot_reloads__';
+
+        var showNativeOfflineFallback = function () {
+          var el = document.getElementById('native-offline-fallback');
+          if (el) el.style.display = 'block';
+        };
+
+        // Wire button: navigate to /providers (offline mode supported there) without needing React first
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('native-offline-btn');
+          if (btn) {
+            btn.addEventListener('click', function () {
+              try { sessionStorage.setItem('appInitialized', 'true'); } catch (e) {}
+              // Force a reload at /providers — by then either React boots, or SW serves cached shell
+              window.location.replace('/providers');
+            });
+          }
+        });
+
+        setTimeout(function () {
+          if (window.__APP_MOUNTED__) return;
+
+          // If we're offline, do NOT silently reload (that just shows white again on iOS).
+          // Show the native fallback button instead so user can proceed.
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            showNativeOfflineFallback();
+            return;
+          }
+
+          try {
+            var n = parseInt(sessionStorage.getItem(RELOAD_KEY) || '0', 10);
+            if (n >= 2) {
+              // Stop reloading; show fallback so user can still proceed
+              showNativeOfflineFallback();
+              return;
+            }
+            sessionStorage.setItem(RELOAD_KEY, String(n + 1));
+          } catch (e) {}
+          window.location.reload();
+        }, WATCHDOG_MS);
+
+        // Also expose fallback after a longer wait regardless (safety net for iOS)
+        setTimeout(function () {
+          if (!window.__APP_MOUNTED__) showNativeOfflineFallback();
+        }, 9000);
+
+        // Reset reload counter once app successfully mounts
+        window.addEventListener('app:mounted', function () {
+          try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) {}
+        });
+      })();
+    </script>
+  </body>
+</html>

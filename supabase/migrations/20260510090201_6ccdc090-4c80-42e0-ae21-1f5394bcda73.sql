@@ -1,0 +1,1 @@
+ALTER TABLE public.delivery_queue ADD COLUMN IF NOT EXISTS topup_amount numeric;

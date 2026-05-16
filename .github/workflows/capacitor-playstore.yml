@@ -1,0 +1,179 @@
+# Capacitor App Build for Google Play Store
+name: Capacitor Play Store Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g., 1.0.5)'
+        required: true
+        default: '1.0.5'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor Android
+        run: npm install @capacitor/android --legacy-peer-deps
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Copy google-services.json
+        run: cp src/assets/google-services.json android/app/google-services.json
+
+      - name: Fix AdMob + Firebase Manifest Merger
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          
+          cat > android/app/src/main/res/xml/ad_services_config.xml << 'XMLEOF'
+<?xml version="1.0" encoding="utf-8"?>
+<ad-services-config>
+    <includes-sdk-library name="com.google.android.gms.ads" />
+    <includes-sdk-library name="com.google.android.gms.measurement" />
+</ad-services-config>
+XMLEOF
+          
+          python3 << 'PYEOF'
+import re
+
+manifest_path = 'android/app/src/main/AndroidManifest.xml'
+
+with open(manifest_path, 'r') as f:
+    content = f.read()
+
+if 'xmlns:tools' not in content:
+    content = content.replace(
+        'xmlns:android="http://schemas.android.com/apk/res/android"',
+        'xmlns:android="http://schemas.android.com/apk/res/android"\n    xmlns:tools="http://schemas.android.com/tools"'
+    )
+
+property_element = '''
+        <property
+            android:name="android.adservices.AD_SERVICES_CONFIG"
+            android:resource="@xml/ad_services_config"
+            tools:replace="android:resource" />'''
+
+pattern = r'(<application[^>]*>)'
+if 'android.adservices.AD_SERVICES_CONFIG' not in content:
+    content = re.sub(pattern, r'\1' + property_element, content, count=1)
+
+with open(manifest_path, 'w') as f:
+    f.write(content)
+
+print("AndroidManifest.xml updated successfully")
+PYEOF
+
+      - name: Update version in build.gradle
+        run: |
+          VERSION_NAME="${{ github.event.inputs.version }}"
+          VERSION_CODE=$(echo $VERSION_NAME | sed 's/\.//g')
+          
+          sed -i "s/versionCode .*/versionCode $VERSION_CODE/" android/app/build.gradle
+          sed -i "s/versionName .*/versionName \"$VERSION_NAME\"/" android/app/build.gradle
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release-key.jks
+
+      - name: Create keystore.properties
+        run: |
+          cat > android/keystore.properties << EOF
+          storeFile=release-key.jks
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Configure signing in build.gradle
+        run: |
+          cat > android/app/signing.gradle << 'EOF'
+          android {
+              signingConfigs {
+                  release {
+                      def keystorePropertiesFile = rootProject.file("keystore.properties")
+                      def keystoreProperties = new Properties()
+                      keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+                      
+                      storeFile file(keystoreProperties['storeFile'])
+                      storePassword keystoreProperties['storePassword']
+                      keyAlias keystoreProperties['keyAlias']
+                      keyPassword keystoreProperties['keyPassword']
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+          
+          echo "apply from: 'signing.gradle'" >> android/app/build.gradle
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Build Release AAB
+        working-directory: android
+        run: ./gradlew bundleRelease
+
+      - name: Rename artifacts
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/iftin-internet-${{ github.event.inputs.version }}.apk
+          mv android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/iftin-internet-${{ github.event.inputs.version }}.aab
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Iftin Internet v${{ github.event.inputs.version }}
+          body: |
+            ## Iftin Internet - Play Store Release
+            
+            ### Downloads
+            - **APK** - Direct installation
+            - **AAB** - Google Play Store upload
+            
+            ### Features
+            - ✅ OneSignal Push Notifications
+            - ✅ Firebase Analytics & Crashlytics
+            - ✅ AdMob Ads
+            - ✅ Offline Support
+          files: |
+            android/app/build/outputs/apk/release/iftin-internet-${{ github.event.inputs.version }}.apk
+            android/app/build/outputs/bundle/release/iftin-internet-${{ github.event.inputs.version }}.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

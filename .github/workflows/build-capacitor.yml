@@ -1,0 +1,192 @@
+# Iftin Internet Customer App - Capacitor Build for Google Play Store
+# Uses Java 17 with KAPT removal AFTER cap sync
+name: Build Iftin Internet Capacitor App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Copy google-services.json
+        run: cp src/assets/google-services.json android/app/google-services.json
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Remove KAPT and Crashlytics (AFTER cap sync - critical order)
+        run: |
+          echo "=== BEFORE: Checking for kapt in app/build.gradle ==="
+          grep -n "kapt" android/app/build.gradle || echo "No kapt lines found initially"
+          
+          # Configure gradle.properties
+          cat >> android/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4096m
+          EOF
+          
+          # CRITICAL: Remove ALL kapt references from app/build.gradle
+          sed -i "/kotlin-kapt/d" android/app/build.gradle
+          sed -i "/kapt /d" android/app/build.gradle
+          sed -i "/kapt(/d" android/app/build.gradle
+          sed -i "/'kapt'/d" android/app/build.gradle
+          sed -i '/\"kapt\"/d' android/app/build.gradle
+          
+          # Remove Firebase Crashlytics plugin completely
+          sed -i "/com.google.firebase.crashlytics/d" android/app/build.gradle
+          sed -i "/crashlytics/d" android/app/build.gradle
+          
+          # Also remove from root build.gradle if exists
+          if [ -f "android/build.gradle" ]; then
+            sed -i "/crashlytics/d" android/build.gradle
+            sed -i "/kapt/d" android/build.gradle
+          fi
+          
+          # Fix Java version references
+          sed -i 's/JavaVersion.VERSION_21/JavaVersion.VERSION_17/g' android/app/build.gradle
+          sed -i 's/jvmTarget = "21"/jvmTarget = "17"/g' android/app/build.gradle
+          
+          echo "=== AFTER: Checking app/build.gradle for kapt ==="
+          grep -n "kapt" android/app/build.gradle || echo "SUCCESS: No kapt found!"
+          
+          echo "=== First 50 lines of app/build.gradle ==="
+          head -50 android/app/build.gradle
+
+      - name: Fix AdMob Manifest Merger
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          
+          cat > android/app/src/main/res/xml/ad_services_config.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <ad-services-config>
+              <includes-sdk-library name="com.google.android.gms.ads" />
+              <includes-sdk-library name="com.google.android.gms.measurement" />
+          </ad-services-config>
+          XMLEOF
+          
+          python3 << 'PYEOF'
+          import re
+          
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          
+          with open(manifest_path, 'r') as f:
+              content = f.read()
+          
+          if 'xmlns:tools' not in content:
+              content = content.replace(
+                  'xmlns:android="http://schemas.android.com/apk/res/android"',
+                  'xmlns:android="http://schemas.android.com/apk/res/android"\n    xmlns:tools="http://schemas.android.com/tools"'
+              )
+          
+          property_element = '''
+                  <property
+                      android:name="android.adservices.AD_SERVICES_CONFIG"
+                      android:resource="@xml/ad_services_config"
+                      tools:replace="android:resource" />'''
+          
+          pattern = r'(<application[^>]*>)'
+          if 'android.adservices.AD_SERVICES_CONFIG' not in content:
+              content = re.sub(pattern, r'\1' + property_element, count=1)
+          
+          with open(manifest_path, 'w') as f:
+              f.write(content)
+          
+          print("AndroidManifest.xml updated successfully")
+          PYEOF
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release-key.jks
+
+      - name: Build Signed APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$PWD/app/release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Build Signed AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$PWD/app/release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Find and rename artifacts
+        run: |
+          APK_PATH=$(find android -name "*.apk" -path "*release*" | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "iftin-internet-${{ github.event.inputs.version }}.apk"
+            echo "APK found and renamed"
+          fi
+          
+          AAB_PATH=$(find android -name "*.aab" -path "*release*" | head -1)
+          if [ -n "$AAB_PATH" ]; then
+            cp "$AAB_PATH" "iftin-internet-${{ github.event.inputs.version }}.aab"
+            echo "AAB found and renamed"
+          fi
+          
+          ls -la *.apk *.aab 2>/dev/null || echo "Listing artifacts..."
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: capacitor-v${{ github.event.inputs.version }}
+          name: Iftin Internet v${{ github.event.inputs.version }}
+          body: |
+            ## Iftin Internet - Capacitor App
+            
+            ### Downloads
+            - **APK** - Signed release APK for direct installation
+            - **AAB** - Signed bundle for Google Play Store upload
+            
+            ### Features
+            - ✅ OneSignal Push Notifications
+            - ✅ Firebase Analytics
+            - ✅ AdMob Ads
+            - ✅ Offline Support
+          files: |
+            iftin-internet-${{ github.event.inputs.version }}.apk
+            iftin-internet-${{ github.event.inputs.version }}.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

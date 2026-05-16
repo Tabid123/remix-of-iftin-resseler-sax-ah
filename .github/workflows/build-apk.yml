@@ -1,0 +1,172 @@
+name: Build Android APK (Legacy)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+      
+    - name: Cache Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/*.kts') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+      
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Accept Android SDK licenses
+      run: |
+        yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+
+    - name: Install Android SDK packages
+      run: |
+        set -e
+        which sdkmanager || echo "sdkmanager not in PATH"
+        sdkmanager --version || true
+        ATTEMPTS=3
+        for i in $(seq 1 $ATTEMPTS); do
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "cmdline-tools;latest" && break || {
+            echo "cmdline-tools install attempt $i failed"; sleep 5;
+          }
+        done
+        yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --update || true
+        ATTEMPTS=3
+        for i in $(seq 1 $ATTEMPTS); do
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-34" "build-tools;34.0.0" && break || {
+            echo "SDK packages install attempt $i failed"; sleep 5;
+          }
+        done
+        sdkmanager --list | head -n 50 || true
+
+    - name: Create local.properties (point to SDK)
+      run: |
+        echo "sdk.dir=$ANDROID_SDK_ROOT" > android-app/local.properties
+
+    - name: Make gradlew executable
+      run: chmod +x android-app/gradlew
+
+    - name: Build Debug APK (optimized)
+      run: |
+        set -o pipefail
+        ATTEMPTS=2
+        SLEEP=10
+        SUCCESS=0
+        for i in $(seq 1 $ATTEMPTS); do
+          ./android-app/gradlew -p android-app clean :app:assembleDebug \
+            -x test -x lint -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
+            --no-daemon --no-build-cache --no-configuration-cache \
+            --max-workers=2 \
+            --stacktrace --info 2>&1 | tee gradle-build.log && SUCCESS=1 && break || SUCCESS=0
+          echo "Build attempt $i failed. Retrying in ${SLEEP}s..." && sleep $SLEEP
+        done
+        if [ "$SUCCESS" != "1" ]; then
+          echo "All build attempts failed." >&2
+          exit 1
+        fi
+
+    - name: Show failing Gradle log tail
+      if: failure()
+      run: |
+        echo "----- Gradle build last 200 lines -----"
+        tail -n 200 gradle-build.log || true
+        echo "----- End of log tail -----"
+    
+    - name: Skip artifact upload (quota workaround)
+      if: failure()
+      run: echo "Artifact upload disabled due to quota limits. See log tail above."
+
+    - name: Get version info
+      id: version
+      run: |
+        echo "version=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+        echo "date=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+
+    - name: Rename APK
+      run: |
+        mkdir -p apk-output
+        cp android-app/app/build/outputs/apk/debug/app-debug.apk apk-output/iftin-delivery.apk
+    
+    - name: Get APK file size
+      id: apk_size
+      run: |
+        APK_SIZE=$(stat -f%z apk-output/iftin-delivery.apk 2>/dev/null || stat -c%s apk-output/iftin-delivery.apk)
+        echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
+
+    - name: Upload APK to Supabase Storage
+      env:
+        SUPABASE_URL: https://tsjqvhddjfuecwxpcuil.supabase.co
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        APK_FILENAME="iftin-delivery-v1.0.${{ github.run_number }}.apk"
+        
+        # Upload to Supabase Storage
+        curl -X POST \
+          "${SUPABASE_URL}/storage/v1/object/apk-builds/${APK_FILENAME}" \
+          -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+          -H "Content-Type: application/vnd.android.package-archive" \
+          -H "x-upsert: true" \
+          --data-binary "@apk-output/iftin-delivery.apk"
+        
+        # Insert build record into database
+        curl -X POST \
+          "${SUPABASE_URL}/rest/v1/apk_builds" \
+          -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+          -H "Content-Type: application/json" \
+          -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+          -H "Prefer: return=minimal" \
+          -d "{
+            \"version\": \"v1.0.${{ github.run_number }}\",
+            \"build_number\": ${{ github.run_number }},
+            \"file_name\": \"${APK_FILENAME}\",
+            \"file_size\": ${{ steps.apk_size.outputs.size }},
+            \"storage_path\": \"apk-builds/${APK_FILENAME}\",
+            \"github_sha\": \"${{ github.sha }}\"
+          }"
+        
+        echo "✅ APK uploaded to Supabase Storage: ${APK_FILENAME}"
+
+    - name: Create Release
+      if: success()
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Iftin Delivery ${{ steps.version.outputs.version }}
+        body: |
+          🤖 **Automatic build from GitHub Actions**
+          
+          📱 **Download:** `iftin-delivery.apk` below
+          
+          📊 **Info:**
+          - Version: ${{ steps.version.outputs.version }}
+          - Build #${{ github.run_number }}
+          - Date: ${{ steps.version.outputs.date }}
+          - Commit: `${{ github.sha }}`
+        files: apk-output/iftin-delivery.apk
+        draft: false
+        prerelease: false
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

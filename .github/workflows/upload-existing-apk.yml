@@ -1,0 +1,89 @@
+name: Upload Existing APK to Supabase
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'public/downloads/iftin-delivery.apk'
+      - '.github/workflows/upload-existing-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  upload-existing-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure APK exists
+        run: |
+          if [ ! -f public/downloads/iftin-delivery.apk ]; then
+            echo "APK file not found at public/downloads/iftin-delivery.apk" >&2
+            exit 1
+          fi
+
+      - name: Get version info from Gradle file
+        id: version
+        run: |
+          VERSION=$(grep -m1 'versionName' android-app/app/build.gradle.kts | awk -F '"' '{print $2}')
+          BUILD_NUMBER=$(grep -m1 'versionCode' android-app/app/build.gradle.kts | awk '{print $3}')
+          TIMESTAMP=$(date +%s)
+          : "${VERSION:=manual}"
+          : "${BUILD_NUMBER:=${GITHUB_RUN_NUMBER}}"
+          FILE_NAME="iftin-delivery-v${VERSION}-${TIMESTAMP}.apk"
+          echo "VERSION=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p apk-output
+          cp public/downloads/iftin-delivery.apk "apk-output/${{ steps.version.outputs.FILE_NAME }}"
+
+      - name: Get APK file size
+        id: filesize
+        run: |
+          FILE_SIZE=$(stat -f%z "apk-output/${{ steps.version.outputs.FILE_NAME }}" 2>/dev/null || stat -c%s "apk-output/${{ steps.version.outputs.FILE_NAME }}")
+          echo "FILE_SIZE=${FILE_SIZE}" >> $GITHUB_OUTPUT
+
+      - name: Upload to Supabase Storage
+        run: |
+          curl -X POST \
+            "https://tsjqvhddjfuecwxpcuil.supabase.co/storage/v1/object/apk-builds/${{ steps.version.outputs.FILE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@apk-output/${{ steps.version.outputs.FILE_NAME }}"
+
+      - name: Update Database records
+        run: |
+          # Mark previous latest as false
+          curl -s -X PATCH \
+            "https://tsjqvhddjfuecwxpcuil.supabase.co/rest/v1/apk_builds?is_latest=eq.true" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '{"is_latest": false}'
+
+          # Insert new record
+          curl -s -X POST \
+            "https://tsjqvhddjfuecwxpcuil.supabase.co/rest/v1/apk_builds" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{\n              \"version\": \"${{ steps.version.outputs.VERSION }}\",\n              \"build_number\": ${{ steps.version.outputs.BUILD_NUMBER }},\n              \"file_name\": \"${{ steps.version.outputs.FILE_NAME }}\",\n              \"file_size\": ${{ steps.filesize.outputs.FILE_SIZE }},\n              \"storage_path\": \"apk-builds/${{ steps.version.outputs.FILE_NAME }}\",\n              \"github_sha\": \"${{ github.sha }}\",\n              \"is_latest\": true\n            }"
+
+      - name: Success Output
+        run: |
+          echo "✅ APK uploaded successfully"
+          echo "🔗 Public URL: https://tsjqvhddjfuecwxpcuil.supabase.co/storage/v1/object/public/apk-builds/${{ steps.version.outputs.FILE_NAME }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iftin-delivery-apk
+          path: apk-output/${{ steps.version.outputs.FILE_NAME }}
+          retention-days: 30

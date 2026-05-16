@@ -1,0 +1,135 @@
+name: Build Complete Android Package (APK + AAB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g., 1.0.0)'
+        required: false
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager --install "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Make gradlew executable
+        run: chmod +x android-app/gradlew
+
+      - name: Clean build cache
+        working-directory: android-app
+        run: |
+          ./gradlew clean --no-daemon
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/build-cache-*
+
+      - name: Build Debug APK
+        working-directory: android-app
+        env:
+          _JAVA_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4096m"
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build Release AAB
+        working-directory: android-app
+        env:
+          _JAVA_OPTIONS: "-Xmx4096m -XX:MaxMetaspaceSize=512m"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4096m"
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version_name }}"
+          DATE=$(date +'%Y-%m-%d')
+          BUILD_NUM=$(date +'%Y%m%d%H%M')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "build_num=$BUILD_NUM" >> $GITHUB_OUTPUT
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-output
+          
+          # Copy and rename APK
+          APK_PATH=$(find android-app/app/build/outputs/apk/debug -name "*.apk" | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "release-output/iftin-internet.apk"
+            echo "✅ APK copied: iftin-internet.apk"
+          fi
+          
+          # Copy and rename AAB
+          AAB_PATH=$(find android-app/app/build/outputs/bundle/release -name "*.aab" | head -1)
+          if [ -n "$AAB_PATH" ]; then
+            cp "$AAB_PATH" "release-output/iftin-internet.aab"
+            echo "✅ AAB copied: iftin-internet.aab"
+          fi
+          
+          ls -la release-output/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-${{ steps.version.outputs.build_num }}
+          name: "Iftin Internet v${{ steps.version.outputs.version }} (${{ steps.version.outputs.date }})"
+          body: |
+            ## 📦 Iftin Internet App - Complete Build
+            
+            ### 📱 Files Included:
+            
+            | File | Purpose | Size |
+            |------|---------|------|
+            | `iftin-internet.apk` | Direct installation on Android devices | Debug build |
+            | `iftin-internet.aab` | Google Play Store upload | Release build |
+            
+            ### 📋 Build Details:
+            - **Version:** ${{ steps.version.outputs.version }}
+            - **Build Date:** ${{ steps.version.outputs.date }}
+            - **Build Number:** ${{ steps.version.outputs.build_num }}
+            - **Commit:** ${{ github.sha }}
+            
+            ### 📲 Installation:
+            - **APK:** Download and install directly on your Android device
+            - **AAB:** Upload to Google Play Console for distribution
+            
+            ---
+            *Built automatically by GitHub Actions*
+          files: |
+            release-output/iftin-internet.apk
+            release-output/iftin-internet.aab
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

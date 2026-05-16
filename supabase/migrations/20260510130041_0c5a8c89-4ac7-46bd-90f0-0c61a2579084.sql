@@ -1,0 +1,1 @@
+ALTER TABLE public.provider_wholesale_tiers DROP COLUMN IF EXISTS ussd_flow_id;

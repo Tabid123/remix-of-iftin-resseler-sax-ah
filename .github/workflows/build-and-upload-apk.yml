@@ -1,0 +1,181 @@
+name: Build and Upload APK to Supabase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'android-app/**'
+      - '.github/workflows/build-and-upload-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      _JAVA_OPTIONS: -Xmx4096m -XX:MaxMetaspaceSize=1024m
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dkotlin.daemon.jvm.options=-Xmx2048m
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Android SDK using cmdline-tools
+        run: |
+          # Download and install Android SDK cmdline-tools
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          mv cmdline-tools latest
+
+          # Set environment variables
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+
+          # Accept licenses
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+          # Install required packages
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "build-tools;33.0.1"
+
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$HOME/android-sdk" > android-app/local.properties
+          cat android-app/local.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android-app/gradlew
+
+      - name: Build APK
+        run: |
+          set -o pipefail
+          cd android-app
+          ATTEMPTS=2
+          for i in $(seq 1 $ATTEMPTS); do
+            ./gradlew clean :app:assembleDebug \
+              -x test -x lint -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
+              --no-daemon --no-build-cache --no-configuration-cache \
+              --max-workers=1 --stacktrace --info 2>&1 | tee ../gradle-build.log && exit 0
+
+            echo "Build attempt $i failed"
+            if [ "$i" -lt "$ATTEMPTS" ]; then
+              echo "Retrying in 10s..."
+              sleep 10
+            fi
+          done
+          exit 1
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: Show failing Gradle log tail
+        if: failure()
+        run: |
+          echo "----- Gradle build last 250 lines -----"
+          tail -n 250 gradle-build.log || true
+          echo "----- End of log tail -----"
+
+      - name: Get version info
+        id: version
+        run: |
+          set +e
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android-app/app/build.gradle.kts 2>/dev/null)
+          BUILD_NUMBER=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' android-app/app/build.gradle.kts 2>/dev/null)
+          set -e
+          if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
+          if [ -z "$BUILD_NUMBER" ]; then BUILD_NUMBER="1"; fi
+          TIMESTAMP=$(date +%s)
+          echo "VERSION=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "FILE_NAME=iftin-delivery-v${VERSION}-${TIMESTAMP}.apk" >> $GITHUB_OUTPUT
+
+      - name: Rename APK
+        run: |
+          mkdir -p apk-output
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk apk-output/${{ steps.version.outputs.FILE_NAME }}
+
+      - name: Get APK file size
+        id: filesize
+        run: |
+          FILE="apk-output/${{ steps.version.outputs.FILE_NAME }}"
+          if [ -f "$FILE" ]; then
+            FILE_SIZE=$(stat -f%z "$FILE" 2>/dev/null || stat -c%s "$FILE" 2>/dev/null || wc -c < "$FILE")
+          else
+            echo "⚠️ APK file not found when measuring size, defaulting to 0"
+            FILE_SIZE=0
+          fi
+          echo "FILE_SIZE=${FILE_SIZE}" >> $GITHUB_OUTPUT
+
+      - name: Upload to Supabase Storage
+        run: |
+          set +e
+          curl -sS -L \
+            -X POST "https://tsjqvhddjfuecwxpcuil.supabase.co/storage/v1/object/apk-builds/${{ steps.version.outputs.FILE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "x-upsert: true" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@apk-output/${{ steps.version.outputs.FILE_NAME }}"
+          CURL_STATUS=$?
+          set -e
+          if [ $CURL_STATUS -ne 0 ]; then
+            echo "⚠️ Storage upload encountered an error but will not fail the workflow."
+          fi
+
+      - name: Update Database
+        run: |
+          set +e
+          # Mark all previous builds as not latest
+          curl -sS -L \
+            -X PATCH "https://tsjqvhddjfuecwxpcuil.supabase.co/rest/v1/apk_builds?is_latest=eq.true" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '{"is_latest": false}' || echo "⚠️ Failed to mark previous builds."
+          
+          # Insert new build record
+          curl -sS -L \
+            -X POST \
+            "https://tsjqvhddjfuecwxpcuil.supabase.co/rest/v1/apk_builds" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{
+              \"version\": \"${{ steps.version.outputs.VERSION }}\",
+              \"build_number\": ${{ steps.version.outputs.BUILD_NUMBER }},
+              \"file_name\": \"${{ steps.version.outputs.FILE_NAME }}\",
+              \"file_size\": ${{ steps.filesize.outputs.FILE_SIZE }},
+              \"storage_path\": \"apk-builds/${{ steps.version.outputs.FILE_NAME }}\",
+              \"github_sha\": \"${{ github.sha }}\",
+              \"is_latest\": true
+            }" || echo "⚠️ Failed to insert build record."
+          set -e
+
+      - name: Success Notification
+        run: |
+          echo "✅ APK built and uploaded successfully!"
+          echo "📦 Version: ${{ steps.version.outputs.VERSION }}"
+          echo "🔢 Build Number: ${{ steps.version.outputs.BUILD_NUMBER }}"
+          echo "📏 File Size: $((${{ steps.filesize.outputs.FILE_SIZE }} / 1024 / 1024)) MB"
+          echo "🔗 Download: https://tsjqvhddjfuecwxpcuil.supabase.co/storage/v1/object/public/apk-builds/${{ steps.version.outputs.FILE_NAME }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iftin-delivery-apk
+          path: apk-output/${{ steps.version.outputs.FILE_NAME }}
+          retention-days: 7

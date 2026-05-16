@@ -1,0 +1,1 @@
+ALTER TABLE public.delivery_queue ADD COLUMN IF NOT EXISTS flow_progress jsonb NOT NULL DEFAULT '[]'::jsonb;

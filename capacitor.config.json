@@ -1,0 +1,39 @@
+{
+  "appId": "com.iftin.internet",
+  "appName": "Iftin Internet",
+  "webDir": "dist",
+  "android": {
+    "captureInput": true,
+    "adjustMarginsForEdgeToEdge": "force"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": false
+    },
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 300,
+      "backgroundColor": "#0099FF",
+      "showSpinner": true,
+      "spinnerColor": "#FFFFFF",
+      "androidSpinnerStyle": "large",
+      "iosSpinnerStyle": "large",
+      "androidScaleType": "CENTER_CROP",
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#0099FF"
+    },
+    "NavigationBar": {
+      "backgroundColor": "#0099FF",
+      "style": "LIGHT"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
