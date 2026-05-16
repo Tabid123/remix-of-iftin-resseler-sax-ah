@@ -716,7 +716,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
 
                 // Single submit guarantee — replaces inline postDelayed
-                submitPinOnce(delayMs = 300L, source = "legacy-pin-dialog")
+                submitPinOnce(delayMs = 600L, source = "legacy-pin-dialog")
 
                 source.recycle()
                 return
@@ -869,7 +869,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            submitPinOnce(delayMs = 300L, source = "flow-step-${step.order}")
+            submitPinOnce(delayMs = 600L, source = "flow-step-${step.order}")
             return true
         }
 
