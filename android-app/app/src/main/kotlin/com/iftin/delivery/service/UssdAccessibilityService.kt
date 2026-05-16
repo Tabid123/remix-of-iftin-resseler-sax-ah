@@ -676,6 +676,7 @@ class UssdAccessibilityService : AccessibilityService() {
             
             if (isPinDialog) {
                 Log.d(TAG, "🔐 PIN dialog detected (legacy path) pinSet=$pinSetCount submit=$submitCount")
+                Log.d(TAG, "📨 Carrier PIN prompt snapshot: ${dialogText?.take(200) ?: "<empty>"}")
 
                 val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString("current_pin_code", "") ?: "").trim()
@@ -1023,36 +1024,12 @@ class UssdAccessibilityService : AccessibilityService() {
      * Hormuud sends a PIN prompt after *712*phone*amount# - we auto-enter "5516"
      */
     private fun enterPinInDialog(root: AccessibilityNodeInfo, pin: String): Boolean {
-        try {
-            val editTexts = mutableListOf<AccessibilityNodeInfo>()
-            findEditTexts(root, editTexts)
-            
-            Log.d(TAG, "🔐 Found ${editTexts.size} EditText fields in PIN dialog")
-            if (editTexts.isEmpty()) return false
-
-            var setSuccess = false
-            for (editText in editTexts) {
-                val existing = editText.text?.toString()?.trim().orEmpty()
-
-                // Force replace existing text with exact PIN value (no appending)
-                editText.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                val arguments = android.os.Bundle().apply {
-                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pin)
-                }
-                val success = editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
-                if (success) {
-                    setSuccess = true
-                    Log.d(TAG, "✅ PIN '$pin' set successfully (replaced previous value='$existing')")
-                }
-            }
-
-            editTexts.forEach { it.recycle() }
-            return setSuccess
+        return try {
+            safeEnterPin(root, pin)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to enter PIN: ${e.message}")
+            false
         }
-        return false
     }
     
     /**
@@ -1061,7 +1038,9 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun findEditTexts(node: AccessibilityNodeInfo, results: MutableList<AccessibilityNodeInfo>) {
         try {
             val className = node.className?.toString() ?: ""
-            if (className.contains("EditText", ignoreCase = true) || node.isEditable) {
+            val bounds = Rect().also { node.getBoundsInScreen(it) }
+            val isVisibleCandidate = node.isVisibleToUser && node.isEnabled && bounds.width() > 0 && bounds.height() > 0
+            if ((className.contains("EditText", ignoreCase = true) || node.isEditable) && isVisibleCandidate) {
                 results.add(AccessibilityNodeInfo.obtain(node))
             }
             for (i in 0 until node.childCount) {
