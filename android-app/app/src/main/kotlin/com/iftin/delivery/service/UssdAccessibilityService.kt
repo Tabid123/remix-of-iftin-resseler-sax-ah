@@ -290,22 +290,39 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         val selectionIndex = candidates.indexOf(preferred)
-        val methods = listOf(
-            // Priority 1: REAL keypad taps via dispatchGesture — only path Somtel SIM Toolkit
-            // trusts as "true keypress" input (eliminates "Invalid PIN format").
-            "gesture_keypad" to { _: AccessibilityNodeInfo, pin: String -> dispatchGestureKeypad(root, pin) },
-            // Priority 2: Clipboard paste (only if field exposes ACTION_PASTE)
-            "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = true) },
-            // Priority 3: Last-resort ACTION_SET_TEXT (Hormuud/dialer text fields)
-            "action_set_text" to { node: AccessibilityNodeInfo, pin: String -> writeWithActionSetText(node, pin) }
-        )
+        val activePackage = root.packageName?.toString().orEmpty()
+        val isSomtelSimToolkitDialog = activePackage.contains("stk", ignoreCase = true) ||
+            activePackage.contains("toolkit", ignoreCase = true) ||
+            activePackage.contains("somtel", ignoreCase = true)
+        val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
+        methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
+            focusEditableField(node, requireAccessibilityFocus = true)
+            dispatchGestureKeypad(root, pin)
+        }
+        methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
+            writeWithClipboardPaste(node, pin, requireFocus = true)
+        }
+        if (!isSomtelSimToolkitDialog) {
+            methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
+                writeWithActionSetText(node, pin)
+            }
+        } else {
+            Log.d(TAG, "🚫 ACTION_SET_TEXT fallback disabled for Somtel/STK package=$activePackage")
+        }
 
         var ok = false
         try {
             for ((methodName, writer) in methods) {
-                clearEditableField(preferred.node)
+                if (methodName == "gesture_keypad") {
+                    if (preferred.existingTextLength > 0) {
+                        Log.w(TAG, "⚠️ Gesture PIN path found prefilled text len=${preferred.existingTextLength}; skipping ACTION_SET_TEXT clear to avoid tainting STK input")
+                    }
+                } else {
+                    clearEditableField(preferred.node)
+                }
                 val wrote = writer(preferred.node, cleanPin)
                 val verification = verifyPinFieldValue(
+                    root = root,
                     candidate = preferred,
                     method = methodName,
                     intendedPin = cleanPin,
@@ -450,15 +467,38 @@ class UssdAccessibilityService : AccessibilityService() {
      * SIM Toolkit as physical key presses, bypassing IME/ACTION_SET_TEXT rejection.
      * Locates dialer keypad number buttons by text ("0".."9") and taps their bounds.
      */
+    private fun extractKeypadDigit(value: String?): Char? {
+        val trimmed = value?.trim().orEmpty()
+        return trimmed.firstOrNull { it.isDigit() }
+    }
+
+    private fun resolveGestureTapBounds(node: AccessibilityNodeInfo): Rect {
+        val ownBounds = Rect().also { node.getBoundsInScreen(it) }
+        val parent = node.parent
+        if (parent != null) {
+            try {
+                if (parent.isVisibleToUser && parent.isClickable) {
+                    val parentBounds = Rect().also { parent.getBoundsInScreen(it) }
+                    if (parentBounds.width() * parentBounds.height() > ownBounds.width() * ownBounds.height()) {
+                        return parentBounds
+                    }
+                }
+            } finally {
+                parent.recycle()
+            }
+        }
+        return ownBounds
+    }
+
     private fun dispatchGestureKeypad(root: AccessibilityNodeInfo, pin: String): Boolean {
         val keyNodes = mutableMapOf<Char, Rect>()
         for (digit in '0'..'9') {
             val matches = root.findAccessibilityNodeInfosByText(digit.toString()) ?: continue
             for (n in matches) {
                 try {
-                    val txt = n.text?.toString()?.trim()
-                    if (txt == digit.toString()) {
-                        val b = Rect().also { n.getBoundsInScreen(it) }
+                    val matchedDigit = extractKeypadDigit(n.text?.toString()) ?: extractKeypadDigit(n.contentDescription?.toString())
+                    if (matchedDigit == digit) {
+                        val b = resolveGestureTapBounds(n)
                         if (b.width() > 30 && b.height() > 30 && n.isVisibleToUser) {
                             // Prefer the largest tappable node (keypad button, not label)
                             val prev = keyNodes[digit]
@@ -511,6 +551,7 @@ class UssdAccessibilityService : AccessibilityService() {
     //  both were ACTION_SET_TEXT variants that Somtel rejects as "Invalid PIN format".)
 
     private fun verifyPinFieldValue(
+        root: AccessibilityNodeInfo,
         candidate: EditableFieldCandidate,
         method: String,
         intendedPin: String,
@@ -518,31 +559,67 @@ class UssdAccessibilityService : AccessibilityService() {
         selectedIndex: Int,
         writeAttempted: Boolean
     ): PinWriteDiagnostics {
-        val refreshed = try { candidate.node.refresh() } catch (_: Exception) { false }
-        val actual = candidate.node.text?.toString().orEmpty()
-        val bounds = Rect().also { candidate.node.getBoundsInScreen(it) }
-        // Gesture taps produce masked text (•••• / ****) — accept any 4-char value
-        // with matching length when the gesture path was used. SET_TEXT/paste paths
-        // must still produce an exact digit match.
-        val maskedMatch = method == "gesture_keypad" && actual.length == intendedPin.length
-        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch)
+        val freshCandidates = collectEditableFieldCandidates(root)
+        var resolvedClassName = candidate.node.className?.toString().orEmpty()
+        var resolvedViewId = candidate.node.viewIdResourceName.orEmpty()
+        var resolvedBounds = Rect().also { candidate.node.getBoundsInScreen(it) }
+        var resolvedFocused = candidate.node.isFocused
+        var resolvedA11yFocused = candidate.node.isAccessibilityFocused
+        var resolvedEditable = candidate.node.isEditable || (candidate.node.className?.toString()?.contains("EditText", ignoreCase = true) == true)
+        var resolvedEnabled = candidate.node.isEnabled
+        var resolvedVisible = candidate.node.isVisibleToUser
+        var refreshed = try { candidate.node.refresh() } catch (_: Exception) { false }
+        var actual = candidate.node.text?.toString().orEmpty()
+
+        try {
+            val refreshedCandidate = freshCandidates
+                .sortedWith(
+                    compareByDescending<EditableFieldCandidate> { candidate.viewId.isNotBlank() && it.viewId == candidate.viewId }
+                        .thenByDescending { Rect.intersects(it.bounds, candidate.bounds) }
+                        .thenByDescending { it.isFocused }
+                        .thenByDescending { it.isAccessibilityFocused }
+                        .thenBy { kotlin.math.abs(it.bounds.top - candidate.bounds.top) }
+                )
+                .firstOrNull()
+
+            if (refreshedCandidate != null) {
+                refreshed = try { refreshedCandidate.node.refresh() } catch (_: Exception) { false }
+                actual = refreshedCandidate.node.text?.toString().orEmpty()
+                resolvedClassName = refreshedCandidate.node.className?.toString().orEmpty()
+                resolvedViewId = refreshedCandidate.node.viewIdResourceName.orEmpty()
+                resolvedBounds = Rect().also { refreshedCandidate.node.getBoundsInScreen(it) }
+                resolvedFocused = refreshedCandidate.node.isFocused
+                resolvedA11yFocused = refreshedCandidate.node.isAccessibilityFocused
+                resolvedEditable = refreshedCandidate.node.isEditable || (refreshedCandidate.node.className?.toString()?.contains("EditText", ignoreCase = true) == true)
+                resolvedEnabled = refreshedCandidate.node.isEnabled
+                resolvedVisible = refreshedCandidate.node.isVisibleToUser
+            }
+        } finally {
+            freshCandidates.forEach { it.node.recycle() }
+        }
+
+        val maskedMatch = method == "gesture_keypad" && actual.length == intendedPin.length && actual.any { !it.isDigit() }
+        val hiddenGestureMatch = method == "gesture_keypad" && writeAttempted && actual.isEmpty() && refreshed && resolvedFocused && resolvedEditable && resolvedEnabled
+        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch || hiddenGestureMatch)
+
         return PinWriteDiagnostics(
             method = method,
             totalCandidates = totalCandidates,
             selectedIndex = selectedIndex,
-            selectedClassName = candidate.node.className?.toString().orEmpty(),
-            selectedViewId = candidate.node.viewIdResourceName.orEmpty(),
-            bounds = bounds,
-            isFocused = candidate.node.isFocused,
-            isAccessibilityFocused = candidate.node.isAccessibilityFocused,
-            isEditable = candidate.node.isEditable || (candidate.node.className?.toString()?.contains("EditText", ignoreCase = true) == true),
-            isEnabled = candidate.node.isEnabled,
-            isVisible = candidate.node.isVisibleToUser,
+            selectedClassName = resolvedClassName,
+            selectedViewId = resolvedViewId,
+            bounds = resolvedBounds,
+            isFocused = resolvedFocused,
+            isAccessibilityFocused = resolvedA11yFocused,
+            isEditable = resolvedEditable,
+            isEnabled = resolvedEnabled,
+            isVisible = resolvedVisible,
             actualValueLength = actual.length,
             exactMatch = exactMatch,
             failureReason = when {
                 !writeAttempted -> "write_action_failed"
                 !refreshed -> "refresh_failed"
+                hiddenGestureMatch -> "hidden_field_verified_by_focus"
                 !exactMatch -> "value_mismatch_len:${actual.length}"
                 else -> null
             }
