@@ -2,11 +2,15 @@ package com.iftin.delivery.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.util.Log
@@ -34,6 +38,36 @@ import kotlin.concurrent.thread
  * - CAPTURES ALL DIALOG TEXT for delivery_notes
  */
 class UssdAccessibilityService : AccessibilityService() {
+
+    private data class EditableFieldCandidate(
+        val node: AccessibilityNodeInfo,
+        val className: String,
+        val viewId: String,
+        val bounds: Rect,
+        val isFocused: Boolean,
+        val isAccessibilityFocused: Boolean,
+        val isEditable: Boolean,
+        val isEnabled: Boolean,
+        val isVisible: Boolean,
+        val existingTextLength: Int
+    )
+
+    private data class PinWriteDiagnostics(
+        val method: String,
+        val totalCandidates: Int,
+        val selectedIndex: Int,
+        val selectedClassName: String,
+        val selectedViewId: String,
+        val bounds: Rect,
+        val isFocused: Boolean,
+        val isAccessibilityFocused: Boolean,
+        val isEditable: Boolean,
+        val isEnabled: Boolean,
+        val isVisible: Boolean,
+        val actualValueLength: Int,
+        val exactMatch: Boolean,
+        val failureReason: String? = null
+    )
 
     companion object {
         private const val TAG = "UssdAccessibility"
@@ -121,7 +155,13 @@ class UssdAccessibilityService : AccessibilityService() {
     // Session guards to prevent duplicate PIN entry
     @Volatile private var ussdSessionToken = 0L
     @Volatile private var pinFilledForSession = false
+    @Volatile private var pinVerifiedForSession = false
     @Volatile private var pinSubmittedForSession = false
+    @Volatile private var pinWriteFailedForSession = false
+    @Volatile private var pinFieldFocusedForSession = false
+    @Volatile private var pinFieldEditableForSession = false
+    @Volatile private var lastPinWriteAtMs = 0L
+    private var lastPinWriteDiagnostics: PinWriteDiagnostics? = null
 
     // Track which dynamic flow steps have already been answered in this session
     private val completedFlowSteps = mutableSetOf<Int>()
@@ -140,7 +180,13 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun resetSessionState(reason: String) {
         pinFilledForSession = false
+        pinVerifiedForSession = false
         pinSubmittedForSession = false
+        pinWriteFailedForSession = false
+        pinFieldFocusedForSession = false
+        pinFieldEditableForSession = false
+        lastPinWriteAtMs = 0L
+        lastPinWriteDiagnostics = null
         completedFlowSteps.clear()
         scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
         scheduledSubmitRunnable = null
