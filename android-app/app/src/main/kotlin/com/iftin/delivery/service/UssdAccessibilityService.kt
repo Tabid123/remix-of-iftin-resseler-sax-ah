@@ -331,10 +331,11 @@ class UssdAccessibilityService : AccessibilityService() {
             pinSetCount++
             lastPinWriteAtMs = System.currentTimeMillis()
             // Suppress the CONTENT_CHANGED echo from ACTION_SET_TEXT
-            setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
+            // Longer suppression covers dispatchGesture tap queue (4 × 150ms) + IME settle
+            setTextSuppressUntilMs = System.currentTimeMillis() + 2500L
             Log.d(
                 TAG,
-                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1500ms, method=${lastPinWriteDiagnostics?.method})"
+                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=2500ms, method=${lastPinWriteDiagnostics?.method})"
             )
         } else {
             pinWriteFailedForSession = true
