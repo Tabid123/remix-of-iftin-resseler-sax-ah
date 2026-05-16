@@ -2,11 +2,13 @@ package com.iftin.delivery.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.GestureDescription
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -289,11 +291,13 @@ class UssdAccessibilityService : AccessibilityService() {
 
         val selectionIndex = candidates.indexOf(preferred)
         val methods = listOf(
-            "action_set_text" to { node: AccessibilityNodeInfo, pin: String -> writeWithActionSetText(node, pin) },
-            "char_by_char" to { node: AccessibilityNodeInfo, pin: String -> writeCharacterByCharacter(node, pin) },
-            "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = false) },
-            "focus_clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = true) },
-            "key_event_simulation" to { node: AccessibilityNodeInfo, pin: String -> writeWithKeyEventSimulation(node, pin) }
+            // Priority 1: REAL keypad taps via dispatchGesture — only path Somtel SIM Toolkit
+            // trusts as "true keypress" input (eliminates "Invalid PIN format").
+            "gesture_keypad" to { _: AccessibilityNodeInfo, pin: String -> dispatchGestureKeypad(root, pin) },
+            // Priority 2: Clipboard paste (only if field exposes ACTION_PASTE)
+            "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = true) },
+            // Priority 3: Last-resort ACTION_SET_TEXT (Hormuud/dialer text fields)
+            "action_set_text" to { node: AccessibilityNodeInfo, pin: String -> writeWithActionSetText(node, pin) }
         )
 
         var ok = false
@@ -327,10 +331,11 @@ class UssdAccessibilityService : AccessibilityService() {
             pinSetCount++
             lastPinWriteAtMs = System.currentTimeMillis()
             // Suppress the CONTENT_CHANGED echo from ACTION_SET_TEXT
-            setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
+            // Longer suppression covers dispatchGesture tap queue (4 × 150ms) + IME settle
+            setTextSuppressUntilMs = System.currentTimeMillis() + 2500L
             Log.d(
                 TAG,
-                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1500ms, method=${lastPinWriteDiagnostics?.method})"
+                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=2500ms, method=${lastPinWriteDiagnostics?.method})"
             )
         } else {
             pinWriteFailedForSession = true
@@ -440,21 +445,51 @@ class UssdAccessibilityService : AccessibilityService() {
         return result
     }
 
-    private fun writeCharacterByCharacter(node: AccessibilityNodeInfo, pin: String): Boolean {
-        focusEditableField(node)
-        var cumulative = ""
-        var success = true
-        for (digit in pin) {
-            cumulative += digit
-            val args = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, cumulative)
+    /**
+     * REAL keypad tap injection via dispatchGesture — appears to the carrier
+     * SIM Toolkit as physical key presses, bypassing IME/ACTION_SET_TEXT rejection.
+     * Locates dialer keypad number buttons by text ("0".."9") and taps their bounds.
+     */
+    private fun dispatchGestureKeypad(root: AccessibilityNodeInfo, pin: String): Boolean {
+        val keyNodes = mutableMapOf<Char, Rect>()
+        for (digit in '0'..'9') {
+            val matches = root.findAccessibilityNodeInfosByText(digit.toString()) ?: continue
+            for (n in matches) {
+                try {
+                    val txt = n.text?.toString()?.trim()
+                    if (txt == digit.toString()) {
+                        val b = Rect().also { n.getBoundsInScreen(it) }
+                        if (b.width() > 30 && b.height() > 30 && n.isVisibleToUser) {
+                            // Prefer the largest tappable node (keypad button, not label)
+                            val prev = keyNodes[digit]
+                            if (prev == null || (b.width() * b.height()) > (prev.width() * prev.height())) {
+                                keyNodes[digit] = b
+                            }
+                        }
+                    }
+                } finally { n.recycle() }
             }
-            val stepResult = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            Log.d(TAG, "⌨️ PIN char-by-char step len=${cumulative.length} result=$stepResult")
-            success = success && stepResult
-            SystemClock.sleep(35)
         }
-        return success
+        // Need every digit of the PIN mapped to a keypad button
+        val missing = pin.toSet().filter { keyNodes[it] == null }
+        if (missing.isNotEmpty()) {
+            Log.w(TAG, "🎮 dispatchGestureKeypad — missing keypad nodes for digits=$missing (found=${keyNodes.keys})")
+            return false
+        }
+        var allOk = true
+        for ((i, digit) in pin.withIndex()) {
+            val b = keyNodes[digit] ?: return false
+            val cx = b.exactCenterX()
+            val cy = b.exactCenterY()
+            val path = Path().apply { moveTo(cx, cy) }
+            val stroke = GestureDescription.StrokeDescription(path, 0L, 60L)
+            val gesture = GestureDescription.Builder().addStroke(stroke).build()
+            val ok = dispatchGesture(gesture, null, null)
+            Log.d(TAG, "🎮 Gesture tap digit='$digit' idx=$i at ($cx,$cy) dispatched=$ok")
+            if (!ok) allOk = false
+            SystemClock.sleep(150)
+        }
+        return allOk
     }
 
     private fun writeWithClipboardPaste(node: AccessibilityNodeInfo, pin: String, requireFocus: Boolean): Boolean {
@@ -472,23 +507,8 @@ class UssdAccessibilityService : AccessibilityService() {
         return pasteResult
     }
 
-    private fun writeWithKeyEventSimulation(node: AccessibilityNodeInfo, pin: String): Boolean {
-        focusEditableField(node, requireAccessibilityFocus = true)
-        var cumulative = ""
-        var success = true
-        for (digit in pin) {
-            cumulative += digit
-            val args = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, cumulative)
-            }
-            val clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            val stepResult = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            Log.d(TAG, "⌨️ PIN key-event simulation step len=${cumulative.length} click=$clicked result=$stepResult")
-            success = success && stepResult
-            SystemClock.sleep(50)
-        }
-        return success
-    }
+    // (writeCharacterByCharacter / writeWithKeyEventSimulation removed —
+    //  both were ACTION_SET_TEXT variants that Somtel rejects as "Invalid PIN format".)
 
     private fun verifyPinFieldValue(
         candidate: EditableFieldCandidate,
@@ -501,7 +521,11 @@ class UssdAccessibilityService : AccessibilityService() {
         val refreshed = try { candidate.node.refresh() } catch (_: Exception) { false }
         val actual = candidate.node.text?.toString().orEmpty()
         val bounds = Rect().also { candidate.node.getBoundsInScreen(it) }
-        val exactMatch = writeAttempted && actual == intendedPin
+        // Gesture taps produce masked text (•••• / ****) — accept any 4-char value
+        // with matching length when the gesture path was used. SET_TEXT/paste paths
+        // must still produce an exact digit match.
+        val maskedMatch = method == "gesture_keypad" && actual.length == intendedPin.length
+        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch)
         return PinWriteDiagnostics(
             method = method,
             totalCandidates = totalCandidates,
@@ -519,7 +543,7 @@ class UssdAccessibilityService : AccessibilityService() {
             failureReason = when {
                 !writeAttempted -> "write_action_failed"
                 !refreshed -> "refresh_failed"
-                actual != intendedPin -> "value_mismatch_len:${actual.length}"
+                !exactMatch -> "value_mismatch_len:${actual.length}"
                 else -> null
             }
         )
@@ -692,7 +716,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
 
                 // Single submit guarantee — replaces inline postDelayed
-                submitPinOnce(delayMs = 300L, source = "legacy-pin-dialog")
+                submitPinOnce(delayMs = 600L, source = "legacy-pin-dialog")
 
                 source.recycle()
                 return
@@ -845,7 +869,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            submitPinOnce(delayMs = 300L, source = "flow-step-${step.order}")
+            submitPinOnce(delayMs = 600L, source = "flow-step-${step.order}")
             return true
         }
 

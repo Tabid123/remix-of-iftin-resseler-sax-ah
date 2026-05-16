@@ -1,82 +1,66 @@
-# UssdAccessibilityService Refactor — Eliminate "Invalid PIN format"
+# Xal Waara: Somtel "Invalid PIN format"
 
-Goal: **one USSD dialog = one PIN entry = one submit**. Remove all duplicate execution paths in `UssdAccessibilityService.kt`.
+## Sababta dhabta ah
 
-> Note: a prior pass of this refactor was already written to the file. This plan re-confirms the architecture so it can be reviewed/approved cleanly. On approval I will verify each item is in place and patch anything missing or weak.
+Somtel SIM Toolkit / USSD dialog-ka **ma aamino** `ACTION_SET_TEXT` (iyo char-by-char oo isagana ah `SET_TEXT`). Inkasta oo qiimaha la arko field-ka dhexdiisa, IME-ka carrier-ka ayaa u arka `programmatic text` oo aan ka iman keypad — sidaas darteed wuxuu ku celiyaa `Invalid PIN format`. Code-ka hadda jira shan "fallback" wuu leeyahay, laakiin **afar ka mid ah ayaa ah SET_TEXT isku mid** — kaliya `clipboard_paste` ayaa xal kale ah, isaguna wuxuu ku xirnaa `ACTION_PASTE` oo SIM Toolkit-ka inta badan **aanu taageerin** (`actionList` ma keeno PASTE).
 
-## File touched
-- `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdAccessibilityService.kt`
-- (light touch only if needed) `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdDialerService.kt` — only to ensure `KEY_LAST_USSD_TIME` is the canonical session token.
+Sidoo kale, `accessibility_service_config.xml` ma laha `flagRequestFilterKeyEvents` ama `canPerformGestures`, sidaas darteed key-event simulation dhab ah lama awoodi karo.
 
-## Architecture
+## Hagaajinta
 
-### 1. Single execution lock
-- `@Volatile var isProcessingDialog: Boolean`
-- `onAccessibilityEvent` returns immediately if already true
-- Released in a `finally` block so exceptions cannot wedge the service
+### 1. Config (`accessibility_service_config.xml`)
+- Ku dar `canPerformGestures="true"` — looga baahan yahay tap gestures dhabta ah keypad-ka USSD.
+- Iska saar `typeViewClicked` event-ka aan loo baahnayn (waxay keentaa noise).
 
-### 2. Event source filtering
-- Process **only `TYPE_WINDOW_STATE_CHANGED`** for PIN/dynamic flow
-- `TYPE_WINDOW_CONTENT_CHANGED` ignored (this is what `ACTION_SET_TEXT` echoes back and re-enters the handler)
-- AndroidManifest accessibility config keeps both types declared, but runtime drops CONTENT_CHANGED
+### 2. Refactor PIN injection (`UssdAccessibilityService.kt`)
 
-### 3. SET_TEXT loop suppression
-- After every `ACTION_SET_TEXT`, set `setTextSuppressUntilMs = now + 1500ms`
-- Any event arriving before that timestamp is ignored with a log line
-- Belt-and-suspenders alongside #2 (covers OEMs that re-fire STATE_CHANGED on text writes)
+**Hierarchy cusub oo gestures dhab ah ku saleysan** (kala saar SET_TEXT-ka SET_TEXT-ka kale):
 
-### 4. Session state
-Per-session, reset whenever `KEY_LAST_USSD_TIME` changes:
-- `ussdSessionToken: Long`
-- `pinSetCount`, `submitCount`, `ignoredEventCount`
-- `pinFilledForSession: Boolean`
-- `pinSubmittedForSession: Boolean`
-- `completedFlowSteps: MutableSet<Int>`
-- `scheduledSubmitRunnable: Runnable?`
+1. **`dispatchGestureKeypad`** (CUSUB - sare ugu mudan):
+   - Hel keypad buttons (`1` `2` `3` ... `*` `#`) oo ah `Button`/`TextView` clickable `com.android.stk`/dialer-ka dhexdiisa via `findAccessibilityNodeInfosByText`.
+   - PIN digit kasta: hel node-ka lambarka (e.g. "5"), `getBoundsInScreen`, ka dibna `dispatchGesture` ku samee `GestureDescription` (StrokeDescription tap 60ms) bartamaha bounds-ka.
+   - Inter-digit delay 120–180ms si carrier-ku ugu sheego "true keypress".
+   - Tani waa shaqeysa SIM Toolkit/dialer keypad ah sababtoo ah waxay u muuqataa physical taps — ma adeegsaneyso IME/SET_TEXT gabi ahaanba.
 
-### 5. `safeEnterPin(root, rawPin)`
-- Strip non-digits, require length 4 (abort + log otherwise)
-- If `pinFilledForSession` is true → skip, log
-- Locate single PIN `EditText`; clear existing text first
-- Single `ACTION_SET_TEXT` write (never append)
-- Set `pinFilledForSession = true`, increment `pinSetCount`, arm SET_TEXT suppression window
+2. **`clipboardPaste`** (haddii field-ka uu taageero `ACTION_PASTE`):
+   - Sida hadda, laakiin xaqiiji `actionList.any { it.id == ACTION_PASTE }` ka hor.
 
-### 6. `submitPinOnce(delayMs, source)`
-- Cancel any prior `scheduledSubmitRunnable` on the handler
-- If `pinSubmittedForSession` true → return, log dup-prevention
-- `postDelayed` a single runnable that:
-  - re-checks `pinSubmittedForSession`
-  - performs the Send/OK click
-  - flips `pinSubmittedForSession = true`, increments `submitCount`
-  - clears `scheduledSubmitRunnable` in `finally`
-- Used by **both** the legacy PIN-dialog branch and dynamic flow PIN steps — single submit codepath
+3. **`actionSetText`** (kaliya fallback ah haddii labadii sare fashilmaan):
+   - Ku noqo hawsha jirta.
 
-### 7. Dynamic flow protection
-- `tryHandleDynamicFlow` consults `completedFlowSteps` and `pinFilledForSession`
-- PIN-typed steps route through `safeEnterPin` + `submitPinOnce`
-- Non-PIN steps still allow one write per step (tracked in `completedFlowSteps`)
-- No `handler.postDelayed` chains can stack: every scheduled action holds the single runnable reference
+**Iska saar** `writeCharacterByCharacter` iyo `writeWithKeyEventSimulation` (labaduba waa SET_TEXT, kuma daraan wax cusub — waxay keenaan inay cilad sidii hore u soo noqoto).
 
-### 8. Production-safe debug logs
-- Event type, package, session token
-- Lock acquire/release
-- SET_TEXT suppression window hits
-- `pinSetCount`, `submitCount`, `ignoredEventCount`
-- Completed flow steps
-- PIN value **never** logged (only length and masked form)
+### 3. Verification & submit timing
+- Kadib `dispatchGesture`, **HA isku dayin** in laga akhriyo `node.text` — keypad-ka USSD field-ka qaarkood waxay muujiyaan `••••` oo aan match-eyn 4-digit PIN-ka. Taa beddelkeeda hubi:
+  - Tirinta `text.length` waa 4 (ama `*` ku jiraan), AMA
+  - 4ta gesture oo dhan ay soo celiyeen `onCompleted` (track `GestureResultCallback`).
+- Hadii gesture path-ka la istcimaalo, ka beddel `pinVerifiedForSession = true` kaliya kadib `onCompleted` 4-jeer.
+- Kor u qaad delay-ga submit-ka 300ms → **600ms** kadib gesture-ka u dambeeyay, si carrier IME-ku u helo waqti uu ugu xaqiijiyo input-ka.
 
-## Expected result
-- One STATE_CHANGED → at most one PIN write → exactly one submit
-- CONTENT_CHANGED echoes from `ACTION_SET_TEXT` are dropped
-- Delayed handlers cannot overlap (single runnable reference + idempotent flags)
-- "Invalid PIN format" caused by double-writes or duplicate submits is eliminated
+### 4. Carrier response logging (Somtel diagnostic)
+Kadib submit, ku daba qor `KEY_LAST_USSD_RESPONSE` oo log-garee:
+- Habka la isticmaalay (`gesture` / `paste` / `set_text`)
+- 4ta gesture status-kooda (`onCompleted` / `onCancelled`)
+- Field-ka qiimihiisa kahor & kadib
+- Qoraalka carrier-ka soo celiyay (e.g. "Invalid PIN format" vs "Mahadsanid")
 
-## Verification after implementation
-- Re-grep for `isProcessingDialog`, `safeEnterPin`, `submitPinOnce`, `setTextSuppressUntilMs`, `ussdSessionToken` to confirm they are wired in every PIN/submit path
-- Confirm `finally { isProcessingDialog = false }` wraps the full handler
-- Confirm there is exactly **one** call site that performs the actual submit click
+### 5. Ilaali guards-ka jira
+**Wax la beddeli maayo:**
+- `isProcessingDialog` lock
+- `setTextSuppressUntilMs` (sii deji 2500ms si suppression-ku u daboolo dispatchGesture queue-ka)
+- `pinFilledForSession` / `pinSubmittedForSession`
+- Single `scheduledSubmitRunnable`
+- `TYPE_WINDOW_STATE_CHANGED` kaliya event filter
 
-## Out of scope
-- Backend / Supabase changes
-- AndroidManifest changes (config already declares both event types; runtime filtering is enough)
-- Any UI work
+## Faylasha la beddelayo
+- `android-app/app/src/main/res/xml/accessibility_service_config.xml` — `canPerformGestures="true"`, ka saar `typeViewClicked`.
+- `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdAccessibilityService.kt`:
+  - Ku dar `dispatchGestureKeypad(root, pin)` helper (uses `dispatchGesture` + `GestureDescription`).
+  - Beddel `safeEnterPin` hierarchy-ga: gesture → paste → set_text.
+  - Iska saar `writeCharacterByCharacter` + `writeWithKeyEventSimulation`.
+  - Cusboonaysii `verifyPinFieldValue` si uu u aqbalo masked text (`•` / `*`) marka length-ku saxan yahay.
+  - Kor u qaad submit delay 300ms → 600ms.
+  - Logging cusub oo carrier response leh.
+
+## Talaabada xigta
+Kadib build, fadlan `adb logcat -s UssdAccessibility` daawo marka aad isku daydo Somtel topup — log-yadu waxay muujin doonaan habka ugu horreeya ee shaqeeyay (`gesture` la rajeynayo).
