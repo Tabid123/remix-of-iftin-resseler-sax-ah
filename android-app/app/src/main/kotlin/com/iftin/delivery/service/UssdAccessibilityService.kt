@@ -553,6 +553,35 @@ class UssdAccessibilityService : AccessibilityService() {
         return pasteResult
     }
 
+    private fun findMaskedPinLengthInTree(node: AccessibilityNodeInfo?): Int {
+        if (node == null) return 0
+        var maxMaskedLength = 0
+        try {
+            val text = node.text?.toString().orEmpty()
+            val contentDesc = node.contentDescription?.toString().orEmpty()
+            val values = listOf(text, contentDesc)
+            values.forEach { value ->
+                val trimmed = value.trim()
+                if (trimmed.isNotEmpty() && trimmed.all { it == '•' || it == '*' }) {
+                    maxMaskedLength = maxOf(maxMaskedLength, trimmed.length)
+                }
+            }
+
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { child ->
+                    try {
+                        maxMaskedLength = maxOf(maxMaskedLength, findMaskedPinLengthInTree(child))
+                    } finally {
+                        child.recycle()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ Masked PIN tree scan failed: ${e.message}")
+        }
+        return maxMaskedLength
+    }
+
     // (writeCharacterByCharacter / writeWithKeyEventSimulation removed —
     //  both were ACTION_SET_TEXT variants that Somtel rejects as "Invalid PIN format".)
 
@@ -604,7 +633,11 @@ class UssdAccessibilityService : AccessibilityService() {
             freshCandidates.forEach { it.node.recycle() }
         }
 
-        val maskedMatch = method == "gesture_keypad" && actual.length == intendedPin.length && actual.any { !it.isDigit() }
+        val maskedTreeLength = if (method == "gesture_keypad") findMaskedPinLengthInTree(root) else 0
+        val maskedMatch = method == "gesture_keypad" && (
+            (actual.length == intendedPin.length && actual.any { !it.isDigit() }) ||
+                maskedTreeLength == intendedPin.length
+            )
         val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch)
 
         return PinWriteDiagnostics(
@@ -624,7 +657,7 @@ class UssdAccessibilityService : AccessibilityService() {
             failureReason = when {
                 !writeAttempted -> "write_action_failed"
                 !refreshed -> "refresh_failed"
-                !exactMatch -> "value_mismatch_len:${actual.length}"
+                !exactMatch -> "value_mismatch_len:${actual.length}:maskedTree=$maskedTreeLength"
                 else -> null
             }
         )
