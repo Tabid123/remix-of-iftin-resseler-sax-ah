@@ -1467,8 +1467,19 @@ class UssdDialerService : Service() {
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
                         .apply()
-                        
-                    return response
+
+                    // Attach PIN diagnostic snapshot if carrier rejected PIN — surfaces
+                    // root cause in admin delivery_notes without needing adb logcat.
+                    val mentionsInvalidPin = response.contains("invalid pin", ignoreCase = true) ||
+                        response.contains("pin khaldan", ignoreCase = true) ||
+                        response.contains("pin format", ignoreCase = true) ||
+                        response.contains("wrong pin", ignoreCase = true)
+                    return if (mentionsInvalidPin) {
+                        val debug = prefs.getString(UssdAccessibilityService.KEY_LAST_PIN_DEBUG, null)
+                        if (!debug.isNullOrBlank()) {
+                            "$response\n\n--- PIN DEBUG ---\n$debug"
+                        } else response
+                    } else response
                 }
                 
                 if (attempt < 2) {
