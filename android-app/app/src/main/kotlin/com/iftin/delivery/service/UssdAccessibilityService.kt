@@ -602,7 +602,8 @@ class UssdAccessibilityService : AccessibilityService() {
         intendedPin: String,
         totalCandidates: Int,
         selectedIndex: Int,
-        writeAttempted: Boolean
+        writeAttempted: Boolean,
+        hasRealEditableField: Boolean = true
     ): PinWriteDiagnostics {
         val freshCandidates = collectEditableFieldCandidates(root)
         var resolvedClassName = candidate.node.className?.toString().orEmpty()
@@ -643,12 +644,17 @@ class UssdAccessibilityService : AccessibilityService() {
             freshCandidates.forEach { it.node.recycle() }
         }
 
-        val maskedTreeLength = if (method == "gesture_keypad") findMaskedPinLengthInTree(root) else 0
-        val maskedMatch = method == "gesture_keypad" && (
+        // Masked-text match is ONLY trusted when no real editable field exists
+        // (pure dialpad screen). When a dialog EditText is present, we require exact
+        // digit match in the selected field — otherwise Somtel/Jeeb returns
+        // "Invalid PIN format" because the visible field never received the PIN.
+        val maskedTreeLength = if (method == "gesture_keypad" && !hasRealEditableField) findMaskedPinLengthInTree(root) else 0
+        val maskedMatch = method == "gesture_keypad" && !hasRealEditableField && (
             (actual.length == intendedPin.length && actual.any { !it.isDigit() }) ||
                 maskedTreeLength == intendedPin.length
             )
-        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch)
+        val exactDigitMatch = actual == intendedPin
+        val exactMatch = writeAttempted && (exactDigitMatch || maskedMatch)
 
         return PinWriteDiagnostics(
             method = method,
@@ -671,6 +677,45 @@ class UssdAccessibilityService : AccessibilityService() {
                 else -> null
             }
         )
+    }
+
+    /**
+     * Persist a compact PIN diagnostic snapshot to SharedPreferences so the user can
+     * inspect what happened on the device without needing adb logcat. The snapshot
+     * is overwritten on every PIN attempt.
+     */
+    private fun persistPinDebugSnapshot(
+        diagnostics: PinWriteDiagnostics,
+        activePackage: String,
+        hasRealEditableField: Boolean,
+        candidateCount: Int
+    ) {
+        try {
+            val snapshot = buildString {
+                append("ts=").append(System.currentTimeMillis()).append('\n')
+                append("pkg=").append(activePackage).append('\n')
+                append("editableFieldPresent=").append(hasRealEditableField).append('\n')
+                append("candidates=").append(candidateCount).append('\n')
+                append("method=").append(diagnostics.method).append('\n')
+                append("selectedClass=").append(diagnostics.selectedClassName).append('\n')
+                append("selectedViewId=").append(diagnostics.selectedViewId.ifBlank { "n/a" }).append('\n')
+                append("focused=").append(diagnostics.isFocused).append('\n')
+                append("a11yFocused=").append(diagnostics.isAccessibilityFocused).append('\n')
+                append("editable=").append(diagnostics.isEditable).append('\n')
+                append("enabled=").append(diagnostics.isEnabled).append('\n')
+                append("visible=").append(diagnostics.isVisible).append('\n')
+                append("actualLen=").append(diagnostics.actualValueLength).append('\n')
+                append("exactMatch=").append(diagnostics.exactMatch).append('\n')
+                append("failure=").append(diagnostics.failureReason ?: "none")
+            }
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAST_PIN_DEBUG, snapshot)
+                .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to persist PIN debug snapshot: ${e.message}")
+        }
     }
 
     private fun logPinWriteDiagnostics(diagnostics: PinWriteDiagnostics) {
