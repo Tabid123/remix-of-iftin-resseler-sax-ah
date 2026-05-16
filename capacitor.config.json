@@ -1,6 +1,6 @@
 {
-  "appId": "com.iftin.internet",
-  "appName": "Iftin Internet",
+  "appId": "com.iftininternet.reseller",
+  "appName": "Iftin Internet Reseller",
   "webDir": "dist",
   "android": {
     "captureInput": true,
