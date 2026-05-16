@@ -207,6 +207,16 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
+        val diag = lastPinWriteDiagnostics
+        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession || !pinFieldFocusedForSession || !pinFieldEditableForSession) {
+            Log.w(
+                TAG,
+                "🛑 submitPinOnce[$source] blocked — filled=$pinFilledForSession verified=$pinVerifiedForSession " +
+                    "writeFailed=$pinWriteFailedForSession focused=$pinFieldFocusedForSession editable=$pinFieldEditableForSession " +
+                    "diag=${diag?.method ?: "none"}/${diag?.actualValueLength ?: -1}"
+            )
+            return
+        }
         scheduledSubmitRunnable?.let {
             handler.removeCallbacks(it)
             Log.d(TAG, "🧹 Cancelled prior scheduled submit before re-scheduling [$source]")
@@ -224,7 +234,12 @@ class UssdAccessibilityService : AccessibilityService() {
                 return@Runnable
             }
             try {
-                Log.d(TAG, "📨 Executing single submit [$source] submitCount=$submitCount sessionToken=$ussdSessionToken")
+                val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
+                Log.d(
+                    TAG,
+                    "📨 Executing single submit [$source] submitCount=$submitCount sessionToken=$ussdSessionToken " +
+                        "submitLagMs=$submitLag verified=${lastPinWriteDiagnostics?.exactMatch == true}"
+                )
                 clickSendOrOkButton(root)
             } finally {
                 root.recycle()
@@ -245,43 +260,81 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
         val cleanPin = rawPin.trim().filter { it.isDigit() }.take(4)
-        if (cleanPin.isEmpty() || cleanPin.length !in 3..4) {
+        if (cleanPin.length != 4) {
             Log.e(TAG, "❌ safeEnterPin aborted — invalid PIN length=${cleanPin.length}")
             return false
         }
-        val edits = mutableListOf<AccessibilityNodeInfo>()
-        findEditTexts(root, edits)
-        if (edits.isEmpty()) {
-            Log.w(TAG, "⚠️ safeEnterPin — no EditText found")
+        pinWriteFailedForSession = false
+        pinFieldFocusedForSession = false
+        pinFieldEditableForSession = false
+        pinVerifiedForSession = false
+        lastPinWriteDiagnostics = null
+
+        val candidates = collectEditableFieldCandidates(root)
+        if (candidates.isEmpty()) {
+            pinWriteFailedForSession = true
+            Log.w(TAG, "⚠️ safeEnterPin — no visible editable field found")
             return false
         }
+
+        logEditableCandidates(candidates)
+
+        val preferred = selectBestEditableCandidate(candidates)
+        if (preferred == null) {
+            pinWriteFailedForSession = true
+            Log.w(TAG, "⚠️ safeEnterPin — no suitable active editable field after filtering")
+            candidates.forEach { it.node.recycle() }
+            return false
+        }
+
+        val selectionIndex = candidates.indexOf(preferred)
+        val methods = listOf(
+            "action_set_text" to { node: AccessibilityNodeInfo, pin: String -> writeWithActionSetText(node, pin) },
+            "char_by_char" to { node: AccessibilityNodeInfo, pin: String -> writeCharacterByCharacter(node, pin) },
+            "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = false) },
+            "focus_clipboard_paste" to { node: AccessibilityNodeInfo, pin: String -> writeWithClipboardPaste(node, pin, requireFocus = true) },
+            "key_event_simulation" to { node: AccessibilityNodeInfo, pin: String -> writeWithKeyEventSimulation(node, pin) }
+        )
+
         var ok = false
         try {
-            for (et in edits) {
-                et.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                // 1. Clear existing text (force replace, never append)
-                val clearArgs = android.os.Bundle().apply {
-                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-                }
-                et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs)
-                // 2. Write exact PIN once
-                val args = android.os.Bundle().apply {
-                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, cleanPin)
-                }
-                if (et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+            for ((methodName, writer) in methods) {
+                clearEditableField(preferred.node)
+                val wrote = writer(preferred.node, cleanPin)
+                val verification = verifyPinFieldValue(
+                    candidate = preferred,
+                    method = methodName,
+                    intendedPin = cleanPin,
+                    totalCandidates = candidates.size,
+                    selectedIndex = selectionIndex,
+                    writeAttempted = wrote
+                )
+                lastPinWriteDiagnostics = verification
+                logPinWriteDiagnostics(verification)
+                if (verification.exactMatch) {
+                    pinFieldFocusedForSession = verification.isFocused || verification.isAccessibilityFocused
+                    pinFieldEditableForSession = verification.isEditable && verification.isEnabled && verification.isVisible
+                    pinVerifiedForSession = true
                     ok = true
                     break
                 }
             }
         } finally {
-            edits.forEach { it.recycle() }
+            candidates.forEach { it.node.recycle() }
         }
         if (ok) {
             pinFilledForSession = true
             pinSetCount++
+            lastPinWriteAtMs = System.currentTimeMillis()
             // Suppress the CONTENT_CHANGED echo from ACTION_SET_TEXT
             setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
-            Log.d(TAG, "✅ safeEnterPin wrote PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1500ms)")
+            Log.d(
+                TAG,
+                "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1500ms, method=${lastPinWriteDiagnostics?.method})"
+            )
+        } else {
+            pinWriteFailedForSession = true
+            Log.w(TAG, "⚠️ safeEnterPin failed — no input method produced an exact 4-digit match")
         }
         return ok
     }
