@@ -516,20 +516,26 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.w(TAG, "🎮 dispatchGestureKeypad — missing keypad nodes for digits=$missing (found=${keyNodes.keys})")
             return false
         }
-        var allOk = true
+        val builder = GestureDescription.Builder()
+        val interDigitDelayMs = 180L
+        val strokeDurationMs = 70L
         for ((i, digit) in pin.withIndex()) {
             val b = keyNodes[digit] ?: return false
             val cx = b.exactCenterX()
             val cy = b.exactCenterY()
             val path = Path().apply { moveTo(cx, cy) }
-            val stroke = GestureDescription.StrokeDescription(path, 0L, 60L)
-            val gesture = GestureDescription.Builder().addStroke(stroke).build()
-            val ok = dispatchGesture(gesture, null, null)
-            Log.d(TAG, "🎮 Gesture tap digit='$digit' idx=$i at ($cx,$cy) dispatched=$ok")
-            if (!ok) allOk = false
-            SystemClock.sleep(150)
+            val startTime = i * interDigitDelayMs
+            builder.addStroke(GestureDescription.StrokeDescription(path, startTime, strokeDurationMs))
+            Log.d(TAG, "🎮 Queued gesture tap digit='$digit' idx=$i at ($cx,$cy) start=${startTime}ms")
         }
-        return allOk
+        val gesture = builder.build()
+        val dispatched = dispatchGesture(gesture, null, null)
+        Log.d(TAG, "🎮 dispatchGestureKeypad sent single multi-stroke gesture dispatched=$dispatched digits=${pin.length}")
+        if (dispatched) {
+            val settleDelay = (pin.length * interDigitDelayMs) + strokeDurationMs + 220L
+            SystemClock.sleep(settleDelay)
+        }
+        return dispatched
     }
 
     private fun writeWithClipboardPaste(node: AccessibilityNodeInfo, pin: String, requireFocus: Boolean): Boolean {
@@ -599,8 +605,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         val maskedMatch = method == "gesture_keypad" && actual.length == intendedPin.length && actual.any { !it.isDigit() }
-        val hiddenGestureMatch = method == "gesture_keypad" && writeAttempted && actual.isEmpty() && refreshed && resolvedFocused && resolvedEditable && resolvedEnabled
-        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch || hiddenGestureMatch)
+        val exactMatch = writeAttempted && (actual == intendedPin || maskedMatch)
 
         return PinWriteDiagnostics(
             method = method,
@@ -619,7 +624,6 @@ class UssdAccessibilityService : AccessibilityService() {
             failureReason = when {
                 !writeAttempted -> "write_action_failed"
                 !refreshed -> "refresh_failed"
-                hiddenGestureMatch -> "hidden_field_verified_by_focus"
                 !exactMatch -> "value_mismatch_len:${actual.length}"
                 else -> null
             }
