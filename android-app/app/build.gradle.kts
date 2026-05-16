@@ -11,7 +11,7 @@ android {
     buildToolsVersion = "34.0.0"
 
     defaultConfig {
-        applicationId = "com.iftinreseller.app"
+        applicationId = "com.iftininternet.reseller"
         minSdk = 23
         targetSdk = 34
         versionCode = 28
