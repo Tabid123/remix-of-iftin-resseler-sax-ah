@@ -321,14 +321,18 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
-            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send)
-            methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
-                writeWithActionSetText(node, pin)
-            }
+            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
+            // CLIPBOARD PASTE FIRST — Samsung Phone numberPassword EditText accepts
+            // ACTION_SET_TEXT but often does NOT trigger TextWatcher/KeyListener,
+            // so Send transmits an empty value → "Invalid PIN format".
+            // PASTE goes through the standard input pipeline and fires the listeners.
             methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithClipboardPaste(node, pin, requireFocus = true)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first (EditText present, package=$activePackage)")
+            methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
+                writeWithActionSetText(node, pin)
+            }
+            Log.d(TAG, "🧭 PIN path = editable-first paste→setText (EditText present, package=$activePackage)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
@@ -346,7 +350,16 @@ class UssdAccessibilityService : AccessibilityService() {
                         Log.w(TAG, "⚠️ Gesture PIN path found prefilled text len=${preferred.existingTextLength}; skipping ACTION_SET_TEXT clear to avoid tainting STK input")
                     }
                 } else {
-                    clearEditableField(preferred.node)
+                    // Only clear when the field actually holds stale content that
+                    // would prepend/append to our PIN. Blind clearing on Samsung
+                    // password EditText can leave the field in an empty-but-dirty
+                    // state that the carrier rejects.
+                    val existing = preferred.node.text?.toString().orEmpty()
+                    if (existing.isNotEmpty() && existing != cleanPin) {
+                        clearEditableField(preferred.node)
+                    } else {
+                        focusEditableField(preferred.node, requireAccessibilityFocus = true)
+                    }
                 }
                 val wrote = writer(preferred.node, cleanPin)
                 val verification = verifyPinFieldValue(
