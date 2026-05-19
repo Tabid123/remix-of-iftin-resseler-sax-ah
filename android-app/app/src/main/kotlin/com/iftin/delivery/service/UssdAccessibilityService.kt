@@ -771,8 +771,9 @@ class UssdAccessibilityService : AccessibilityService() {
         
         // Configure service - NO packageNames filter to listen to ALL apps
         val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            // STATE-only at runtime to match XML config. CONTENT_CHANGED echoes from
+            // ACTION_SET_TEXT/PASTE were causing re-entry → duplicate PIN writes → "Invalid PIN format".
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -907,9 +908,14 @@ class UssdAccessibilityService : AccessibilityService() {
                 val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString("current_pin_code", "") ?: "").trim()
 
+                // Always use rootInActiveWindow for PIN — event.source can be a
+                // subtree that misses the EditText or the Send button.
+                val pinRoot = rootInActiveWindow ?: source
+
                 if (!pinFilledForSession) {
-                    if (!safeEnterPin(source, rawPin)) {
+                    if (!safeEnterPin(pinRoot, rawPin)) {
                         Log.w(TAG, "⚠️ Legacy PIN entry skipped or failed (already filled or invalid)")
+                        if (pinRoot !== source) pinRoot.recycle()
                         source.recycle()
                         return
                     }
@@ -920,6 +926,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 // Single submit guarantee — replaces inline postDelayed
                 submitPinOnce(delayMs = 600L, source = "legacy-pin-dialog")
 
+                if (pinRoot !== source) pinRoot.recycle()
                 source.recycle()
                 return
             }
