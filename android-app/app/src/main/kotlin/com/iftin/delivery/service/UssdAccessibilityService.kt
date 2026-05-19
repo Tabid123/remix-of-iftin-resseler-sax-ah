@@ -231,13 +231,33 @@ class UssdAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "🛑 Scheduled submit aborted — already submitted")
                 return@Runnable
             }
-            pinSubmittedForSession = true
-            submitCount++
             val root = rootInActiveWindow
             if (root == null) {
                 Log.w(TAG, "⚠️ Submit fired but rootInActiveWindow=null")
                 return@Runnable
             }
+            // FINAL GUARD: re-verify a visible editable field still holds our PIN
+            // (or masked equivalent) before clicking Send. Prevents pressing Send
+            // on an empty/cleared field which is the main cause of Invalid PIN format.
+            val freshCandidates = collectEditableFieldCandidates(root)
+            try {
+                val activeField = freshCandidates.firstOrNull {
+                    it.isVisible && it.isEnabled && it.isEditable
+                }
+                val actualText = activeField?.node?.text?.toString().orEmpty()
+                val intendedLen = 4
+                val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
+                val lengthOk = actualText.length == intendedLen
+                if (activeField != null && !lengthOk && !looksMasked) {
+                    Log.w(TAG, "🛑 Submit guard: field text len=${actualText.length} != $intendedLen; NOT clicking Send")
+                    root.recycle()
+                    return@Runnable
+                }
+            } finally {
+                freshCandidates.forEach { it.node.recycle() }
+            }
+            pinSubmittedForSession = true
+            submitCount++
             try {
                 val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
                 Log.d(
