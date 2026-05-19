@@ -231,13 +231,33 @@ class UssdAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "🛑 Scheduled submit aborted — already submitted")
                 return@Runnable
             }
-            pinSubmittedForSession = true
-            submitCount++
             val root = rootInActiveWindow
             if (root == null) {
                 Log.w(TAG, "⚠️ Submit fired but rootInActiveWindow=null")
                 return@Runnable
             }
+            // FINAL GUARD: re-verify a visible editable field still holds our PIN
+            // (or masked equivalent) before clicking Send. Prevents pressing Send
+            // on an empty/cleared field which is the main cause of Invalid PIN format.
+            val freshCandidates = collectEditableFieldCandidates(root)
+            try {
+                val activeField = freshCandidates.firstOrNull {
+                    it.isVisible && it.isEnabled && it.isEditable
+                }
+                val actualText = activeField?.node?.text?.toString().orEmpty()
+                val intendedLen = 4
+                val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
+                val lengthOk = actualText.length == intendedLen
+                if (activeField != null && !lengthOk && !looksMasked) {
+                    Log.w(TAG, "🛑 Submit guard: field text len=${actualText.length} != $intendedLen; NOT clicking Send")
+                    root.recycle()
+                    return@Runnable
+                }
+            } finally {
+                freshCandidates.forEach { it.node.recycle() }
+            }
+            pinSubmittedForSession = true
+            submitCount++
             try {
                 val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
                 Log.d(
@@ -301,14 +321,18 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
-            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send)
-            methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
-                writeWithActionSetText(node, pin)
-            }
+            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
+            // CLIPBOARD PASTE FIRST — Samsung Phone numberPassword EditText accepts
+            // ACTION_SET_TEXT but often does NOT trigger TextWatcher/KeyListener,
+            // so Send transmits an empty value → "Invalid PIN format".
+            // PASTE goes through the standard input pipeline and fires the listeners.
             methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithClipboardPaste(node, pin, requireFocus = true)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first (EditText present, package=$activePackage)")
+            methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
+                writeWithActionSetText(node, pin)
+            }
+            Log.d(TAG, "🧭 PIN path = editable-first paste→setText (EditText present, package=$activePackage)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
@@ -326,7 +350,16 @@ class UssdAccessibilityService : AccessibilityService() {
                         Log.w(TAG, "⚠️ Gesture PIN path found prefilled text len=${preferred.existingTextLength}; skipping ACTION_SET_TEXT clear to avoid tainting STK input")
                     }
                 } else {
-                    clearEditableField(preferred.node)
+                    // Only clear when the field actually holds stale content that
+                    // would prepend/append to our PIN. Blind clearing on Samsung
+                    // password EditText can leave the field in an empty-but-dirty
+                    // state that the carrier rejects.
+                    val existing = preferred.node.text?.toString().orEmpty()
+                    if (existing.isNotEmpty() && existing != cleanPin) {
+                        clearEditableField(preferred.node)
+                    } else {
+                        focusEditableField(preferred.node, requireAccessibilityFocus = true)
+                    }
                 }
                 val wrote = writer(preferred.node, cleanPin)
                 val verification = verifyPinFieldValue(
@@ -738,8 +771,9 @@ class UssdAccessibilityService : AccessibilityService() {
         
         // Configure service - NO packageNames filter to listen to ALL apps
         val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            // STATE-only at runtime to match XML config. CONTENT_CHANGED echoes from
+            // ACTION_SET_TEXT/PASTE were causing re-entry → duplicate PIN writes → "Invalid PIN format".
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -874,9 +908,14 @@ class UssdAccessibilityService : AccessibilityService() {
                 val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString("current_pin_code", "") ?: "").trim()
 
+                // Always use rootInActiveWindow for PIN — event.source can be a
+                // subtree that misses the EditText or the Send button.
+                val pinRoot = rootInActiveWindow ?: source
+
                 if (!pinFilledForSession) {
-                    if (!safeEnterPin(source, rawPin)) {
+                    if (!safeEnterPin(pinRoot, rawPin)) {
                         Log.w(TAG, "⚠️ Legacy PIN entry skipped or failed (already filled or invalid)")
+                        if (pinRoot !== source) pinRoot.recycle()
                         source.recycle()
                         return
                     }
@@ -887,6 +926,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 // Single submit guarantee — replaces inline postDelayed
                 submitPinOnce(delayMs = 600L, source = "legacy-pin-dialog")
 
+                if (pinRoot !== source) pinRoot.recycle()
                 source.recycle()
                 return
             }

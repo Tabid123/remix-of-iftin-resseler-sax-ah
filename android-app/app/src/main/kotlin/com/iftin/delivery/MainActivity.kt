@@ -254,6 +254,9 @@ fun MainScreen(
     var failedDeliveries by remember { mutableStateOf(0) }
     var pendingDeliveries by remember { mutableStateOf(0) }
 
+    var pinDebugSnapshot by remember { mutableStateOf("") }
+    var pinDebugTime by remember { mutableStateOf(0L) }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val db = remember(context) { com.iftin.delivery.data.DeliveryDatabase.getInstance(context) }
@@ -276,6 +279,13 @@ fun MainScreen(
             } catch (e: Exception) {
                 pendingDeliveries = 0
             }
+
+            // Read last PIN debug snapshot from accessibility service prefs
+            try {
+                val pinPrefs = context.getSharedPreferences("iftin_ussd_prefs", Context.MODE_PRIVATE)
+                pinDebugSnapshot = pinPrefs.getString("last_pin_debug_snapshot", "") ?: ""
+                pinDebugTime = pinPrefs.getLong("last_pin_debug_time", 0L)
+            } catch (_: Exception) {}
 
             delay(2000)
         }
@@ -473,6 +483,41 @@ fun MainScreen(
                 InstructionItem("4. Disable battery optimization")
                 InstructionItem("5. Keep phone charging 24/7")
                 InstructionItem("6. Service runs automatically ♾️")
+            }
+        }
+
+        // PIN Debug snapshot card — surfaces last Accessibility PIN-write attempt
+        // so the user can diagnose "Invalid PIN format" without adb logcat.
+        if (pinDebugSnapshot.isNotBlank()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🧪 Last PIN Attempt",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
+                    if (pinDebugTime > 0L) {
+                        val ago = ((System.currentTimeMillis() - pinDebugTime) / 1000L).coerceAtLeast(0)
+                        Text(
+                            text = "${ago}s ago",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = pinDebugSnapshot,
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
+                }
             }
         }
     }
