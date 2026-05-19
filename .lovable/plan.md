@@ -1,108 +1,49 @@
 ## Ujeeddo
-Xallinta joogtada ah ee qaladka Somtel/Jeeb ee `Invalid PIN format` marka USSD PIN lagu gelinayo Android AccessibilityService, iyadoo aan dib loo soo celin duplicate-execution bugs-kii hore.
+Joojinta joogtada ah ee qaladka `Invalid PIN format` marka 4-digit PIN lagu gelinayo USSD dialog-ka Android, iyadoo aan dib loo soo celin duplicate-submit ama re-entry bugs-kii hore.
 
-## Waxa dhibaatadu dhab ahaantii tahay
-Sawirka ugu dambeeya wuxuu caddeeyay in prompt-ku yahay **USSD dialog leh EditText + Send**, ee aanu ahayn dialpad-only screen.
+## Qorshaha
+1. **Ka dhigo dialog processing-ku inuu ku shaqeeyo root-ka saxda ah**
+   - `tryClickConfirmButton` iyo PIN flow-ka waxaan u wareejin doonaa `rootInActiveWindow` halkii ay kaga tiirsanaan lahaayeen `event.source`.
+   - Tani waxay xaqiijinaysaa in service-ku arko EditText-ka saxda ah iyo Send button-ka saxda ah, gaar ahaan Samsung Phone dialogs.
 
-Taasi waxay muujinaysaa in path-ka hadda mudnaanta koowaad leh ee `gesture_keypad` uu qaldan yahay xaaladdan:
-- wuxuu raadinayaa digit nodes guud ahaan root-ka,
-- wuxuu taaban karaa keypad/dialer/IME digits halkii uu ku qori lahaa EditText-ka USSD,
-- kadib verification-ku wuxuu u qaadan karaa in PIN la qoray iyadoo masked text ama geed kale laga helay,
-- ugu dambayn carrier-ku wuxuu helayaa input aan sax ahayn ama aan ka iman field-ka saxda ah, markaasna wuxuu soo celinayaa `Invalid PIN format`.
+2. **Adkeeyo xulashada field-ka PIN-ka**
+   - Waxaan sifayn doonaa `collectEditableFieldCandidates`/`selectBestEditableCandidate` si ay uga reebaan keyboard/IME nodes, hidden nodes, iyo candidates aan prompt-ka la xiriirin.
+   - Mudnaanta waxaa la siin doonaa focused EditText-ka prompt-ka ku dhex jira, kadib kan u dhow prompt text-ka iyo Send/Dir button-ka.
 
-## Files-ka la saameynayo
-- `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdAccessibilityService.kt`
-- Haddii loo baahdo oo keliya config/telemetry:
-  - `android-app/app/src/main/res/xml/accessibility_service_config.xml`
-  - `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdDialerService.kt`
+3. **Bedelo habka qorista PIN-ka ee editable dialog-ka**
+   - Waxaan ka saari doonaa `clearEditableField(ACTION_SET_TEXT="")` ee hadda si indho-la’aan ah u shaqeeya, sababtoo ah wuxuu taaban karaa password field-ka ka hor qorista.
+   - Habka cusub wuxuu noqon doonaa: focus/click field -> qorid hab ammaan ah -> re-focus -> dib u xaqiijin.
+   - Order-ka qorista waxaan ka dhigi doonaa mid carrier/dialog-friendly: `clipboard_paste` marka hore, kadib `ACTION_SET_TEXT` fallback haddii loo baahdo.
 
-## Qorshaha fulinta
-### 1) Ku dar diagnostics gudaha app-ka ah oo aan u baahnayn adb logcat
-Waxaan ku dari doonaa debug capture rasmi ah gudaha `UssdAccessibilityService` si baaritaanka xiga aanu ugu xirnaan logcat:
-- keydin `last_pin_debug_snapshot` gudaha `SharedPreferences` ama local file,
-- snapshot-ku ha qoro:
-  - `packageName`, `windowId`, event type,
-  - dialog text oo dhan,
-  - editable candidates oo dhan: class, viewId, bounds, focused/editable/enabled/visible,
-  - input method la isku dayay,
-  - natiijada verify-ga,
-  - button la click-gareeyay,
-  - carrier response text haddii uu yimaado.
+4. **Adkeeyo verify-ga si aan false success loo aqbalin**
+   - Verify-gu wuxuu ku koobnaan doonaa field-kii la doortay ama refreshed match-kiisa saxda ah; tree-level ama masked heuristics laguma aamini doono marka EditText jiro.
+   - Haddii 4 digits field-ka saxda ah aan lagu helin, submit lama samayn doono.
 
-Tani waxay naga saari doontaa “wax logcat ah ma hayo” blocker-ka, oo wareegga xiga xog dhab ah ayeynu heli doonaa gudaha app-ka laftiisa.
+5. **Xakameeyo submit-ka inuu dhaco marka field-ku dhab ahaan diyaar yahay**
+   - `submitPinOnce` wuxuu heli doonaa re-check ka hor click-ga Send: field-ku wali ha ahaado kii saxda ahaa, write-gu ha noqdo verified, focus/visibility-na ha saxnaadaan.
+   - Waxaan ku dari doonaa dib-u-eegis gaaban ka hor submit si loo yareeyo xaaladaha ay field-ku focus lumiso kadib write.
 
-### 2) Bedel logic-ka PIN entry-ga: “editable-first”, ma aha “gesture-first”
-Waxaan dib u habeyn doonaa `safeEnterPin` si xaaladda Somtel/Jeeb ee sawirkaaga u noqoto sidan:
-- haddii **editable field muuqdo**, ha la isticmaalo **field-only path**,
-- `gesture_keypad` ha noqdo fallback kaliya marka **wax EditText ah jirin**,
-- Somtel/Jeeb prompt-kan gaarka ah lagama oggolaan doono keypad gesture priority.
+6. **Soo bandhigo diagnostics gudaha app-ka**
+   - `last_pin_debug_snapshot` oo hadda la keydiyo ayaan ka dhigi doonaa mid laga arki karo `MainActivity` iyo/ama admin view si aan logcat dambe ugu xirnaan.
+   - Waxaa la tusi doonaa method-ka la adeegsaday, field la doortay, exactMatch, failure reason, focused/editable/visible state, iyo waqtiga attempt-ka.
 
-Go’aanka cusub wuxuu noqon doonaa:
-```text
-if focused/visible editable field exists:
-  use dialog field input path
-else:
-  use keypad gesture fallback
-```
+7. **Hubin is-waafajin event strategy-ga**
+   - XML-ka hadda waa `typeWindowStateChanged` oo keliya, laakiin service-ka Kotlin weli internally ayuu u diiwaan-gashan yahay `TYPE_WINDOW_CONTENT_CHANGED` sidoo kale.
+   - Waxaan qorshaha ku dari doonaa in la waafajiyo config-ka iyo runtime strategy-ga si aan re-entry noise loo soo celin, balse aan weli lumin updates-ka muhiimka ah ee dialog-ka.
 
-### 3) Adkee field selection-ka si uu u doorto input-ka saxda ah
-Waxaan hagaajin doonaa xulashada candidate-ka si loo doorto field-ka prompt-ka Jeeb/Somtel:
-- mudnaan sare: focused input,
-- kadib: input-ka ugu dhow text-ka prompt-ka iyo Send button-ka,
-- hoos loo dhigo candidates ka iman kara IME/keyboard ama hidden nodes,
-- haddii viewId la helo, waxaa loo isticmaali doonaa xulasho deggan.
-
-### 4) Ka saar verification-ka been-abuurka ah ee gesture path-ka xaaladdan
-Hadda verification-ku wuxuu aqbali karaa masked match tree-level ah. Taasi waxay u muuqataa inay siin karto false positive.
-
-Waxaan kala saari doonaa verify-ga sidan:
-- **editable dialog path**: waa inuu ka xaqiijiyaa field-ka la doortay laftiisa ama refreshed matching candidate,
-- **keypad fallback**: waxaa loo oggolaan karaa masked/tree heuristics oo keliya marka aan EditText jirin.
-
-Sidaas ayaan uga hortagi doonaa in service-ku yiraahdo “PIN wrote and verified” iyadoo field-ka saxda ahi maran yahay.
-
-### 5) Bedel habka qorista field-ka Somtel/Jeeb
-Waxaan tijaabo ahaan u kala hormarin doonaa hababka qorista ee editable dialog-ka:
-1. focus + click field + direct field write hal mar,
-2. haddii clear loo baahdo, clear aan taint-gareyn field-ka,
-3. paste/setText fallback oo keliya marka xaaladdu u oggolaato,
-4. gesture keypad **maya** haddii EditText jiro.
-
-Waxaan sidoo kale ilaalin doonaa:
-- hal mar oo kaliya PIN write per session,
-- hal mar oo kaliya submit runnable,
-- suppression against duplicate re-entry.
-
-### 6) Hagaaji event strategy-ga si content updates muhiim ahi aanay u lumin
-Hadda service-ku wuxuu aad ugu tiirsan yahay `TYPE_WINDOW_STATE_CHANGED` oo keliya. Waxaan dib u qaabeyn doonaa si:
-- PIN dialog active yahay marka content/focus updates muhiim ah la aqbalo si xaddidan,
-- balse session/window guards-ka la adkeeyo si duplicate execution uusan u soo laaban.
-
-Tani waxay muhiim u tahay Samsung Phone USSD dialogs oo mararka qaar focus/value updates ku dira `WINDOW_CONTENT_CHANGED` halkii `WINDOW_STATE_CHANGED` kaliya.
-
-### 7) Xaddid submit-ka inuu dhaco kaliya marka field-ku dhab ahaan sax yahay
-`submitPinOnce` lama ordi doono ilaa diagnostics-ku cadeeyo:
-- field sax ah ayaa la doortay,
-- writeAttempted = true,
-- verify = true on selected field,
-- Send/Dir button-ka saxda ah ayaa la helay.
-
-Haddii verify-ku fashilmo, service-ku wuxuu qori doonaa snapshot-ka oo submit ma sameyn doono.
+8. **Dib u dhis APK kadib**
+   - Marka isbeddelladaas la sameeyo, APK cusub ayaa la dhisi doonaa si aad isla markiiba ugu tijaabiso device-ka dhibaatadu ka jirto.
 
 ## Technical details
-### Root cause-ka la filayo
-- `safeEnterPin()` wuxuu hadda Somtel/STK ku bilaabaa `gesture_keypad`.
-- Sawirkaagu wuxuu muujinayaa **dialog input field** oo keyboard/phone UI ka sarreeya.
-- `dispatchGestureKeypad()` wuxuu ka baarayaa digit text root-ka oo dhan, taasoo si sahlan ugu dhacaysa digit nodes aan ahayn field input proper.
-- `verifyPinFieldValue()` wuxuu oggolaan karaa masked/tree match, sidaas darteed false success ayaa dhici karta.
-- `submitPinOnce()` kadib carrier-ku wuxuu helayaa input aan sax ahayn, wuxuuna soo celiyaa `Invalid PIN format`.
+- Qaladka hadda u badan wuxuu ka imanayaa isku darka saddex arrimood:
+  1. dialog-ka waxaa laga yaabaa in laga qabto subtree khaldan (`event.source`),
+  2. field-ka password-ka waxaa si aan ammaan ahayn loo `clear` gareeyaa ka hor qorista,
+  3. submit-ka mararka qaar wuxuu ku tiirsan yahay state uu verify-gu si xadidan u xaqiijiyey.
+- `normalizePin(...).take(4)` ma aha dhibaatadaada hadda, maadaama aad xaqiijisay PIN-ku inuu yahay 4-digit.
+- Beddelka XML keligii xal ma aha, sababtoo ah `onServiceConnected()` weli runtime ahaan ayuu ku daraa `TYPE_WINDOW_CONTENT_CHANGED`.
 
-### Do I know what the issue is?
-Haa — hadda dhibaatada ugu weyn waa in **code-ku u treat-gareynayo Somtel prompt-ka sidii keypad-driven input**, halka sawirkaagu muujinayo **editable USSD dialog field**. Xalka waara waa in logic-ka loo rogo **editable-field-first + strict verification + in-app diagnostics**.
-
-## Natiijada la filayo kadib fulinta
-- Somtel/Jeeb PIN waxa lagu qori doonaa field-ka saxda ah,
-- `gesture_keypad` looma adeegsan doono marka EditText jiro,
-- false verification lama aqbali doono,
-- duplicate execution guards way sii jiri doonaan,
-- haddii wax wali qaldamaan, app-ku wuxuu hayn doonaa debug snapshot aan adb u baahnayn si wareegga xiga si degdeg ah loo xalliyo.
+## Natiijada la filayo
+- PIN-ka 4-digit wuxuu geli doonaa EditText-ka saxda ah ee USSD dialog-ka.
+- Send lama riixi doono ilaa field-ka saxda ahi dhab ahaan hayo PIN-ka.
+- Haddii ay wali dhacdo, gudaha app-ka ayaa laga arki doonaa sababta saxda ah halkii logcat looga baahan lahaa.
+- Waxaan heli doonaa APK cusub oo si toos ah loogu tijaabiyo Somtel/Jeeb.
