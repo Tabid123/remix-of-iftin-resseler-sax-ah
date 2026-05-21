@@ -682,10 +682,9 @@ class UssdAccessibilityService : AccessibilityService() {
         // digit match in the selected field — otherwise Somtel/Jeeb returns
         // "Invalid PIN format" because the visible field never received the PIN.
         val maskedTreeLength = if (method == "gesture_keypad" && !hasRealEditableField) findMaskedPinLengthInTree(root) else 0
-        val maskedMatch = method == "gesture_keypad" && !hasRealEditableField && (
-            (actual.length == intendedPin.length && actual.any { !it.isDigit() }) ||
-                maskedTreeLength == intendedPin.length
-            )
+        val maskedMatch = (
+            actual.length == intendedPin.length && actual.any { !it.isDigit() }
+        ) || (maskedTreeLength == intendedPin.length && maskedTreeLength > 0)
         val exactDigitMatch = actual == intendedPin
         val exactMatch = writeAttempted && (exactDigitMatch || maskedMatch)
 
