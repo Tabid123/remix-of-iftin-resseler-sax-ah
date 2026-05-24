@@ -1008,11 +1008,19 @@ class UssdAccessibilityService : AccessibilityService() {
         } ?: return false
 
         val lower = dialogText.lowercase()
+        val looksLikePinDialog = lower.contains("pin") ||
+            lower.contains("password") ||
+            lower.contains("furaha")
         val step = flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
         } ?: return false
+
+        if (looksLikePinDialog && !step.isPinField) {
+            Log.w(TAG, "⚠️ Dynamic flow step #${step.order} matched on PIN dialog but isPinField=false; deferring to PIN handler")
+            return false
+        }
 
         // PIN guard: do NOT re-enter PIN if already filled this session.
         // Prevents Somnet "Invalid PIN format" loops where the carrier re-prompts.
