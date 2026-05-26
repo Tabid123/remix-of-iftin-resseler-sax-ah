@@ -613,8 +613,25 @@ class UssdAccessibilityService : AccessibilityService() {
 
         val pasteSupported = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_PASTE }
         val pasteResult = if (pasteSupported) node.performAction(AccessibilityNodeInfo.ACTION_PASTE) else false
-        Log.d(TAG, "📋 PIN paste requireFocus=$requireFocus supported=$pasteSupported result=$pasteResult")
-        return pasteResult
+        // After paste, verify length. If the field still doesn't reflect the PIN,
+        // fall back to the dirty-loop SET_TEXT path so the TextWatcher fires.
+        try { SystemClock.sleep(60L) } catch (_: Exception) {}
+        try { node.refresh() } catch (_: Exception) {}
+        val pastedLen = node.text?.toString()?.length ?: 0
+        val pasteOk = pasteResult && pastedLen == pin.length
+        if (pasteOk) {
+            try {
+                val selArgs = android.os.Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pin.length)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pin.length)
+                }
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
+            } catch (_: Exception) {}
+            Log.d(TAG, "📋 PIN paste OK requireFocus=$requireFocus len=$pastedLen")
+            return true
+        }
+        Log.w(TAG, "📋 PIN paste insufficient (supported=$pasteSupported result=$pasteResult len=$pastedLen) — falling back to SET_TEXT dirty-loop")
+        return writeWithActionSetText(node, pin)
     }
 
     private fun findMaskedPinLengthInTree(node: AccessibilityNodeInfo?): Int {
