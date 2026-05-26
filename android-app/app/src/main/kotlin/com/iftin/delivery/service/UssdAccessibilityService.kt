@@ -497,11 +497,32 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
         focusEditableField(node)
+        // Samsung-friendly "dirty-loop": first set to empty (forces beforeTextChanged),
+        // then set to the PIN (forces onTextChanged + afterTextChanged), then move
+        // the cursor to the end. Without the empty pre-step, Samsung's numberPassword
+        // EditText accepts ACTION_SET_TEXT but never fires the TextWatcher/KeyListener,
+        // so the carrier receives an empty value → "Invalid PIN format".
+        val emptyArgs = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+        }
+        val clearedOk = try { node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, emptyArgs) } catch (_: Exception) { false }
+        try { SystemClock.sleep(40L) } catch (_: Exception) {}
+
         val args = android.os.Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pin)
         }
         val result = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        Log.d(TAG, "⌨️ PIN write via ACTION_SET_TEXT result=$result")
+
+        // Move the cursor to the end so the IME/dialog treats the value as committed.
+        try {
+            val selArgs = android.os.Bundle().apply {
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pin.length)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pin.length)
+            }
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
+        } catch (_: Exception) { /* selection not critical */ }
+
+        Log.d(TAG, "⌨️ PIN write via ACTION_SET_TEXT dirtyLoop cleared=$clearedOk result=$result")
         return result
     }
 
