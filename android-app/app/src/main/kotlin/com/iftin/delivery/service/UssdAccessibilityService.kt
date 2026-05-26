@@ -248,11 +248,29 @@ class UssdAccessibilityService : AccessibilityService() {
                 val intendedLen = 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val lengthOk = actualText.length == intendedLen
-                if (activeField != null && !lengthOk && !looksMasked) {
-                    Log.w(TAG, "🛑 Submit guard: field text len=${actualText.length} != $intendedLen; NOT clicking Send")
+                val maskedFullLen = looksMasked && actualText.length == intendedLen
+                val digitsExact = lengthOk && actualText.all { it.isDigit() }
+                if (activeField != null && !digitsExact && !maskedFullLen) {
+                    Log.w(
+                        TAG,
+                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen " +
+                            "digitsExact=$digitsExact maskedFullLen=$maskedFullLen — NOT clicking Send"
+                    )
+                    // Persist a reason so the user can see why the dialog didn't submit.
+                    try {
+                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit()
+                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked")
+                            .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
+                            .apply()
+                    } catch (_: Exception) {}
                     root.recycle()
                     return@Runnable
                 }
+                Log.d(
+                    TAG,
+                    "✅ Submit guard PASS: len=${actualText.length} digitsExact=$digitsExact maskedFullLen=$maskedFullLen"
+                )
             } finally {
                 freshCandidates.forEach { it.node.recycle() }
             }
@@ -497,11 +515,32 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
         focusEditableField(node)
+        // Samsung-friendly "dirty-loop": first set to empty (forces beforeTextChanged),
+        // then set to the PIN (forces onTextChanged + afterTextChanged), then move
+        // the cursor to the end. Without the empty pre-step, Samsung's numberPassword
+        // EditText accepts ACTION_SET_TEXT but never fires the TextWatcher/KeyListener,
+        // so the carrier receives an empty value → "Invalid PIN format".
+        val emptyArgs = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+        }
+        val clearedOk = try { node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, emptyArgs) } catch (_: Exception) { false }
+        try { SystemClock.sleep(40L) } catch (_: Exception) {}
+
         val args = android.os.Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pin)
         }
         val result = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        Log.d(TAG, "⌨️ PIN write via ACTION_SET_TEXT result=$result")
+
+        // Move the cursor to the end so the IME/dialog treats the value as committed.
+        try {
+            val selArgs = android.os.Bundle().apply {
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pin.length)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pin.length)
+            }
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
+        } catch (_: Exception) { /* selection not critical */ }
+
+        Log.d(TAG, "⌨️ PIN write via ACTION_SET_TEXT dirtyLoop cleared=$clearedOk result=$result")
         return result
     }
 
@@ -592,8 +631,25 @@ class UssdAccessibilityService : AccessibilityService() {
 
         val pasteSupported = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_PASTE }
         val pasteResult = if (pasteSupported) node.performAction(AccessibilityNodeInfo.ACTION_PASTE) else false
-        Log.d(TAG, "📋 PIN paste requireFocus=$requireFocus supported=$pasteSupported result=$pasteResult")
-        return pasteResult
+        // After paste, verify length. If the field still doesn't reflect the PIN,
+        // fall back to the dirty-loop SET_TEXT path so the TextWatcher fires.
+        try { SystemClock.sleep(60L) } catch (_: Exception) {}
+        try { node.refresh() } catch (_: Exception) {}
+        val pastedLen = node.text?.toString()?.length ?: 0
+        val pasteOk = pasteResult && pastedLen == pin.length
+        if (pasteOk) {
+            try {
+                val selArgs = android.os.Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pin.length)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pin.length)
+                }
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
+            } catch (_: Exception) {}
+            Log.d(TAG, "📋 PIN paste OK requireFocus=$requireFocus len=$pastedLen")
+            return true
+        }
+        Log.w(TAG, "📋 PIN paste insufficient (supported=$pasteSupported result=$pasteResult len=$pastedLen) — falling back to SET_TEXT dirty-loop")
+        return writeWithActionSetText(node, pin)
     }
 
     private fun findMaskedPinLengthInTree(node: AccessibilityNodeInfo?): Int {
