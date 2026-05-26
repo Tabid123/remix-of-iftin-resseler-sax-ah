@@ -248,11 +248,29 @@ class UssdAccessibilityService : AccessibilityService() {
                 val intendedLen = 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val lengthOk = actualText.length == intendedLen
-                if (activeField != null && !lengthOk && !looksMasked) {
-                    Log.w(TAG, "🛑 Submit guard: field text len=${actualText.length} != $intendedLen; NOT clicking Send")
+                val maskedFullLen = looksMasked && actualText.length == intendedLen
+                val digitsExact = lengthOk && actualText.all { it.isDigit() }
+                if (activeField != null && !digitsExact && !maskedFullLen) {
+                    Log.w(
+                        TAG,
+                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen " +
+                            "digitsExact=$digitsExact maskedFullLen=$maskedFullLen — NOT clicking Send"
+                    )
+                    // Persist a reason so the user can see why the dialog didn't submit.
+                    try {
+                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit()
+                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked")
+                            .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
+                            .apply()
+                    } catch (_: Exception) {}
                     root.recycle()
                     return@Runnable
                 }
+                Log.d(
+                    TAG,
+                    "✅ Submit guard PASS: len=${actualText.length} digitsExact=$digitsExact maskedFullLen=$maskedFullLen"
+                )
             } finally {
                 freshCandidates.forEach { it.node.recycle() }
             }
