@@ -302,8 +302,8 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "⏭️ safeEnterPin skipped — pin already written this session (pinSetCount=$pinSetCount)")
             return false
         }
-        val cleanPin = rawPin.trim().filter { it.isDigit() }
-        if (cleanPin.length != 4) {
+        val cleanPin = rawPin.trim().filter { it.isDigit() }.take(4)
+        if (cleanPin.isEmpty() || cleanPin.length != 4) {
             Log.e(TAG, "❌ safeEnterPin aborted — invalid PIN length=${cleanPin.length}")
             return false
         }
