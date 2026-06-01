@@ -307,6 +307,7 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
         val cleanPin = rawPin.trim().filter { it.isDigit() }.take(4)
+        lastIntendedPinForSession = cleanPin
         if (cleanPin.isEmpty() || cleanPin.length != 4) {
             Log.e(TAG, "❌ safeEnterPin aborted — invalid PIN length=${cleanPin.length}")
             return false
@@ -343,18 +344,19 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
+            val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // CLIPBOARD PASTE FIRST — Samsung Phone numberPassword EditText accepts
-            // ACTION_SET_TEXT but often does NOT trigger TextWatcher/KeyListener,
-            // so Send transmits an empty value → "Invalid PIN format".
-            // PASTE goes through the standard input pipeline and fires the listeners.
-            methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
-                writeWithClipboardPaste(node, pin, requireFocus = true)
+            // Samsung clipboard paste is race-prone and can append/duplicate digits
+            // (for example 5516 -> 55165), so Samsung uses SET_TEXT only.
+            if (!isSamsungPhoneUi) {
+                methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
+                    writeWithClipboardPaste(node, pin, requireFocus = true)
+                }
             }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first paste→setText (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = editable-first ${if (isSamsungPhoneUi) "setText-only" else "paste→setText"} (EditText present, package=$activePackage)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
