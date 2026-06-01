@@ -167,6 +167,7 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var pinFieldEditableForSession = false
     @Volatile private var lastPinWriteAtMs = 0L
     private var lastPinWriteDiagnostics: PinWriteDiagnostics? = null
+    @Volatile private var lastIntendedPinForSession = ""
 
     // Track which dynamic flow steps have already been answered in this session
     private val completedFlowSteps = mutableSetOf<Int>()
@@ -192,6 +193,7 @@ class UssdAccessibilityService : AccessibilityService() {
         pinFieldEditableForSession = false
         lastPinWriteAtMs = 0L
         lastPinWriteDiagnostics = null
+        lastIntendedPinForSession = ""
         completedFlowSteps.clear()
         scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
         scheduledSubmitRunnable = null
@@ -245,22 +247,24 @@ class UssdAccessibilityService : AccessibilityService() {
                     it.isVisible && it.isEnabled && it.isEditable
                 }
                 val actualText = activeField?.node?.text?.toString().orEmpty()
-                val intendedLen = 4
+                val intendedPin = lastIntendedPinForSession
+                val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
-                val lengthOk = actualText.length == intendedLen
                 val maskedFullLen = looksMasked && actualText.length == intendedLen
-                val digitsExact = lengthOk && actualText.all { it.isDigit() }
-                if (activeField != null && !digitsExact && !maskedFullLen) {
+                val digitsVisible = actualText.any { it.isDigit() }
+                val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
+                val digitsMismatch = digitsVisible && intendedPin.isNotEmpty() && actualText != intendedPin
+                if (activeField != null && (digitsMismatch || (!digitsExact && !maskedFullLen))) {
                     Log.w(
                         TAG,
                         "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen " +
-                            "digitsExact=$digitsExact maskedFullLen=$maskedFullLen — NOT clicking Send"
+                            "digitsExact=$digitsExact digitsMismatch=$digitsMismatch maskedFullLen=$maskedFullLen actual='$actualText' expected='$intendedPin' — NOT clicking Send"
                     )
                     // Persist a reason so the user can see why the dialog didn't submit.
                     try {
                         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked")
+                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked actual=$actualText expected=$intendedPin")
                             .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
                             .apply()
                     } catch (_: Exception) {}
@@ -303,6 +307,7 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
         val cleanPin = rawPin.trim().filter { it.isDigit() }.take(4)
+        lastIntendedPinForSession = cleanPin
         if (cleanPin.isEmpty() || cleanPin.length != 4) {
             Log.e(TAG, "❌ safeEnterPin aborted — invalid PIN length=${cleanPin.length}")
             return false
@@ -339,18 +344,19 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
+            val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // CLIPBOARD PASTE FIRST — Samsung Phone numberPassword EditText accepts
-            // ACTION_SET_TEXT but often does NOT trigger TextWatcher/KeyListener,
-            // so Send transmits an empty value → "Invalid PIN format".
-            // PASTE goes through the standard input pipeline and fires the listeners.
-            methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
-                writeWithClipboardPaste(node, pin, requireFocus = true)
+            // Samsung clipboard paste is race-prone and can append/duplicate digits
+            // (for example 5516 -> 55165), so Samsung uses SET_TEXT only.
+            if (!isSamsungPhoneUi) {
+                methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
+                    writeWithClipboardPaste(node, pin, requireFocus = true)
+                }
             }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first paste→setText (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = editable-first ${if (isSamsungPhoneUi) "setText-only" else "paste→setText"} (EditText present, package=$activePackage)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
