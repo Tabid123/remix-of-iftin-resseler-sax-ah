@@ -8,13 +8,19 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.Gravity
+import android.view.WindowManager
+import android.widget.TextView
 import android.util.Log
 import com.iftin.delivery.api.UssdFlowsClient
 import okhttp3.MediaType.Companion.toMediaType
@@ -184,6 +190,88 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var submitCount = 0
     @Volatile private var ignoredEventCount = 0
 
+    // ===== PIN HUD OVERLAY =====
+    // Visible system overlay that shows live PIN-write state on top of the USSD
+    // dialog so the user can see exactly what was typed without adb logcat.
+    private var hudView: TextView? = null
+    private var hudAttached = false
+    private val hudDismissRunnable = Runnable { hidePinHud() }
+    private var hudFirstReadLen = -1
+    private var hudAttemptCount = 0
+
+    private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
+        try {
+            // Require SYSTEM_ALERT_WINDOW permission (granted by user via Settings).
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                return
+            }
+            val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+            val maskedActual = if (actual.isEmpty()) "<empty>" else actual
+            val text = buildString {
+                append("🧪 PIN DEBUG\n")
+                append("Status: ").append(status).append('\n')
+                append("Expected: ").append(expected).append(" (len=").append(expected.length).append(")\n")
+                append("Actual:   ").append(maskedActual).append(" (len=").append(actual.length).append(")\n")
+                append("Method:   ").append(method)
+                if (extra.isNotBlank()) { append('\n').append(extra) }
+            }
+            handler.post {
+                try {
+                    if (hudView == null) {
+                        val tv = TextView(this)
+                        val bg = GradientDrawable().apply {
+                            cornerRadius = 18f
+                            setColor(AndroidColor.parseColor("#EE000000"))
+                            setStroke(3, AndroidColor.parseColor("#FFC107"))
+                        }
+                        tv.background = bg
+                        tv.setPadding(28, 24, 28, 24)
+                        tv.setTextColor(AndroidColor.parseColor("#FFEB3B"))
+                        tv.textSize = 13f
+                        tv.typeface = android.graphics.Typeface.MONOSPACE
+                        hudView = tv
+                    }
+                    hudView?.text = text
+                    if (!hudAttached) {
+                        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        else
+                            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+                        val lp = WindowManager.LayoutParams(
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            type,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                            android.graphics.PixelFormat.TRANSLUCENT
+                        )
+                        lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                        lp.y = 80
+                        wm.addView(hudView, lp)
+                        hudAttached = true
+                    }
+                    handler.removeCallbacks(hudDismissRunnable)
+                    handler.postDelayed(hudDismissRunnable, 8000L)
+                } catch (e: Exception) {
+                    Log.w(TAG, "HUD attach failed: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "showPinHud error: ${e.message}")
+        }
+    }
+
+    private fun hidePinHud() {
+        try {
+            if (hudAttached && hudView != null) {
+                val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                wm?.removeView(hudView)
+            }
+        } catch (_: Exception) {}
+        hudAttached = false
+    }
+
     private fun resetSessionState(reason: String) {
         pinFilledForSession = false
         pinVerifiedForSession = false
@@ -202,6 +290,8 @@ class UssdAccessibilityService : AccessibilityService() {
         submitCount = 0
         ignoredEventCount = 0
         isProcessingDialog = false
+        hudFirstReadLen = -1
+        hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
     }
 
@@ -222,84 +312,130 @@ class UssdAccessibilityService : AccessibilityService() {
                     "writeFailed=$pinWriteFailedForSession focused=$pinFieldFocusedForSession editable=$pinFieldEditableForSession " +
                     "diag=${diag?.method ?: "none"}/${diag?.actualValueLength ?: -1}"
             )
+            showPinHud(
+                status = "BLOCKED: precheck",
+                expected = lastIntendedPinForSession,
+                actual = "",
+                method = diag?.method ?: "none",
+                extra = "filled=$pinFilledForSession verified=$pinVerifiedForSession focused=$pinFieldFocusedForSession"
+            )
             return
         }
         scheduledSubmitRunnable?.let {
             handler.removeCallbacks(it)
             Log.d(TAG, "🧹 Cancelled prior scheduled submit before re-scheduling [$source]")
         }
-        val r = Runnable {
-            if (pinSubmittedForSession) {
-                Log.d(TAG, "🛑 Scheduled submit aborted — already submitted")
-                return@Runnable
-            }
-            val root = rootInActiveWindow
-            if (root == null) {
-                Log.w(TAG, "⚠️ Submit fired but rootInActiveWindow=null")
-                return@Runnable
-            }
-            // FINAL GUARD: re-verify a visible editable field still holds our PIN
-            // (or masked equivalent) before clicking Send. Prevents pressing Send
-            // on an empty/cleared field which is the main cause of Invalid PIN format.
-            val freshCandidates = collectEditableFieldCandidates(root)
-            try {
-                val activeField = freshCandidates.firstOrNull {
-                    it.isVisible && it.isEnabled && it.isEditable
+        // ===== RETRY-WITH-VERIFY LOOP =====
+        // Instead of a single guard check 600ms after write, we poll the field up
+        // to maxAttempts × pollIntervalMs and only click Send once the visible
+        // text matches the intended PIN (digits or full-length mask). This fixes
+        // Hormuud/Somtel TextWatcher delay → "Invalid PIN format" loops where the
+        // field is empty at the moment of the previous one-shot check.
+        val maxAttempts = 10
+        val pollIntervalMs = 150L
+        hudAttemptCount = 0
+        hudFirstReadLen = -1
+        val attemptRunnable = object : Runnable {
+            override fun run() {
+                if (pinSubmittedForSession) return
+                hudAttemptCount++
+                val root = rootInActiveWindow
+                if (root == null) {
+                    if (hudAttemptCount < maxAttempts) {
+                        handler.postDelayed(this, pollIntervalMs)
+                    } else {
+                        showPinHud("BLOCKED: no root window", lastIntendedPinForSession, "", lastPinWriteDiagnostics?.method ?: "?", "attempts=$hudAttemptCount/$maxAttempts")
+                    }
+                    return
                 }
-                val rawText = activeField?.node?.text?.toString()
-                val actualText = rawText.orEmpty()
+                val freshCandidates = collectEditableFieldCandidates(root)
+                var actualText = ""
+                var hasField = false
+                var fieldFocused = false
+                var fieldEditable = false
+                try {
+                    val activeField = freshCandidates.firstOrNull { it.isVisible && it.isEnabled && it.isEditable }
+                    if (activeField != null) {
+                        try { activeField.node.refresh() } catch (_: Exception) {}
+                        actualText = activeField.node.text?.toString().orEmpty()
+                        hasField = true
+                        fieldFocused = activeField.node.isFocused || activeField.node.isAccessibilityFocused
+                        fieldEditable = activeField.node.isEditable || activeField.className.contains("EditText", ignoreCase = true)
+                    }
+                } finally {
+                    freshCandidates.forEach { it.node.recycle() }
+                }
+                if (hudFirstReadLen < 0) hudFirstReadLen = actualText.length
+
                 val intendedPin = lastIntendedPinForSession
                 val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val maskedFullLen = looksMasked && actualText.length == intendedLen
-                val digitsVisible = actualText.any { it.isDigit() }
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
-                val digitsMismatch = digitsVisible && intendedPin.isNotEmpty() && actualText != intendedPin
-                // STRICT: never click Send when the field text is null/empty or
-                // its length does not exactly match the expected PIN length.
-                val nullOrEmpty = rawText == null || actualText.isEmpty()
-                val wrongLength = actualText.length != intendedLen
-                if (activeField != null && (nullOrEmpty || wrongLength || digitsMismatch || (!digitsExact && !maskedFullLen))) {
-                    Log.w(
-                        TAG,
-                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength " +
-                            "digitsExact=$digitsExact digitsMismatch=$digitsMismatch maskedFullLen=$maskedFullLen actual='$actualText' expected='$intendedPin' — NOT clicking Send"
-                    )
-                    // Persist a reason so the user can see why the dialog didn't submit.
+                val ok = hasField && (digitsExact || maskedFullLen)
+
+                // Live HUD update during polling
+                showPinHud(
+                    status = if (ok) "READY → SEND" else "VERIFYING ${hudAttemptCount}/$maxAttempts",
+                    expected = intendedPin,
+                    actual = actualText,
+                    method = lastPinWriteDiagnostics?.method ?: "?",
+                    extra = "firstLen=$hudFirstReadLen focused=$fieldFocused editable=$fieldEditable"
+                )
+
+                if (!ok) {
+                    if (hudAttemptCount < maxAttempts) {
+                        root.recycle()
+                        handler.postDelayed(this, pollIntervalMs)
+                        return
+                    }
+                    // Exhausted attempts → block + persist reason
+                    val reason = "submit_timeout attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen finalLen=${actualText.length} masked=$looksMasked actual='$actualText' expected='$intendedPin'"
+                    Log.w(TAG, "🛑 Submit BLOCK after retries: $reason")
                     try {
                         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength masked=$looksMasked actual=$actualText expected=$intendedPin")
+                            .putString(KEY_LAST_PIN_DEBUG, reason)
                             .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
                             .apply()
                     } catch (_: Exception) {}
+                    showPinHud(
+                        status = "BLOCKED: field never filled",
+                        expected = intendedPin,
+                        actual = actualText,
+                        method = lastPinWriteDiagnostics?.method ?: "?",
+                        extra = "attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen"
+                    )
                     root.recycle()
-                    return@Runnable
+                    return
                 }
-                Log.d(
-                    TAG,
-                    "✅ Submit guard PASS: len=${actualText.length} digitsExact=$digitsExact maskedFullLen=$maskedFullLen"
-                )
-            } finally {
-                freshCandidates.forEach { it.node.recycle() }
-            }
-            pinSubmittedForSession = true
-            submitCount++
-            try {
-                val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
-                Log.d(
-                    TAG,
-                    "📨 Executing single submit [$source] submitCount=$submitCount sessionToken=$ussdSessionToken " +
-                        "submitLagMs=$submitLag verified=${lastPinWriteDiagnostics?.exactMatch == true}"
-                )
-                clickSendOrOkButton(root)
-            } finally {
-                root.recycle()
+
+                // ===== READY — click Send =====
+                pinSubmittedForSession = true
+                submitCount++
+                try {
+                    val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
+                    Log.d(
+                        TAG,
+                        "📨 Executing submit [$source] attempt=$hudAttemptCount submitCount=$submitCount " +
+                            "submitLagMs=$submitLag actualLen=${actualText.length}"
+                    )
+                    clickSendOrOkButton(root)
+                    showPinHud(
+                        status = "SENT ✓",
+                        expected = intendedPin,
+                        actual = actualText,
+                        method = lastPinWriteDiagnostics?.method ?: "?",
+                        extra = "attempts=$hudAttemptCount submitLagMs=$submitLag"
+                    )
+                } finally {
+                    root.recycle()
+                }
             }
         }
-        scheduledSubmitRunnable = r
-        handler.postDelayed(r, delayMs)
-        Log.d(TAG, "⏱️ Scheduled single submit in ${delayMs}ms [$source]")
+        scheduledSubmitRunnable = attemptRunnable
+        handler.postDelayed(attemptRunnable, delayMs)
+        Log.d(TAG, "⏱️ Scheduled retry-verify submit (first poll in ${delayMs}ms, up to $maxAttempts attempts) [$source]")
     }
 
     /**
@@ -426,9 +562,26 @@ class UssdAccessibilityService : AccessibilityService() {
                 TAG,
                 "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1800ms, method=${lastPinWriteDiagnostics?.method})"
             )
+            showPinHud(
+                status = "WRITING ✓",
+                expected = cleanPin,
+                actual = lastPinWriteDiagnostics?.let { d ->
+                    // diagnostics doesn't store text; we just show length match
+                    if (d.exactMatch) cleanPin else "len=${d.actualValueLength}"
+                } ?: "?",
+                method = lastPinWriteDiagnostics?.method ?: "?",
+                extra = "pkg=$activePackage candidates=${candidates.size}"
+            )
         } else {
             pinWriteFailedForSession = true
             Log.w(TAG, "⚠️ safeEnterPin failed — no input method produced an exact 4-digit match")
+            showPinHud(
+                status = "WRITE FAIL",
+                expected = cleanPin,
+                actual = "",
+                method = lastPinWriteDiagnostics?.method ?: "?",
+                extra = "pkg=$activePackage candidates=${candidates.size} reason=${lastPinWriteDiagnostics?.failureReason ?: "?"}"
+            )
         }
         return ok
     }
@@ -1497,6 +1650,7 @@ class UssdAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         multiDialogRunnable?.let { handler.removeCallbacks(it) }
+        hidePinHud()
         Log.d(TAG, "UssdAccessibilityService destroyed")
     }
 
