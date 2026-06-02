@@ -312,84 +312,130 @@ class UssdAccessibilityService : AccessibilityService() {
                     "writeFailed=$pinWriteFailedForSession focused=$pinFieldFocusedForSession editable=$pinFieldEditableForSession " +
                     "diag=${diag?.method ?: "none"}/${diag?.actualValueLength ?: -1}"
             )
+            showPinHud(
+                status = "BLOCKED: precheck",
+                expected = lastIntendedPinForSession,
+                actual = "",
+                method = diag?.method ?: "none",
+                extra = "filled=$pinFilledForSession verified=$pinVerifiedForSession focused=$pinFieldFocusedForSession"
+            )
             return
         }
         scheduledSubmitRunnable?.let {
             handler.removeCallbacks(it)
             Log.d(TAG, "🧹 Cancelled prior scheduled submit before re-scheduling [$source]")
         }
-        val r = Runnable {
-            if (pinSubmittedForSession) {
-                Log.d(TAG, "🛑 Scheduled submit aborted — already submitted")
-                return@Runnable
-            }
-            val root = rootInActiveWindow
-            if (root == null) {
-                Log.w(TAG, "⚠️ Submit fired but rootInActiveWindow=null")
-                return@Runnable
-            }
-            // FINAL GUARD: re-verify a visible editable field still holds our PIN
-            // (or masked equivalent) before clicking Send. Prevents pressing Send
-            // on an empty/cleared field which is the main cause of Invalid PIN format.
-            val freshCandidates = collectEditableFieldCandidates(root)
-            try {
-                val activeField = freshCandidates.firstOrNull {
-                    it.isVisible && it.isEnabled && it.isEditable
+        // ===== RETRY-WITH-VERIFY LOOP =====
+        // Instead of a single guard check 600ms after write, we poll the field up
+        // to maxAttempts × pollIntervalMs and only click Send once the visible
+        // text matches the intended PIN (digits or full-length mask). This fixes
+        // Hormuud/Somtel TextWatcher delay → "Invalid PIN format" loops where the
+        // field is empty at the moment of the previous one-shot check.
+        val maxAttempts = 10
+        val pollIntervalMs = 150L
+        hudAttemptCount = 0
+        hudFirstReadLen = -1
+        val attemptRunnable = object : Runnable {
+            override fun run() {
+                if (pinSubmittedForSession) return
+                hudAttemptCount++
+                val root = rootInActiveWindow
+                if (root == null) {
+                    if (hudAttemptCount < maxAttempts) {
+                        handler.postDelayed(this, pollIntervalMs)
+                    } else {
+                        showPinHud("BLOCKED: no root window", lastIntendedPinForSession, "", lastPinWriteDiagnostics?.method ?: "?", "attempts=$hudAttemptCount/$maxAttempts")
+                    }
+                    return
                 }
-                val rawText = activeField?.node?.text?.toString()
-                val actualText = rawText.orEmpty()
+                val freshCandidates = collectEditableFieldCandidates(root)
+                var actualText = ""
+                var hasField = false
+                var fieldFocused = false
+                var fieldEditable = false
+                try {
+                    val activeField = freshCandidates.firstOrNull { it.isVisible && it.isEnabled && it.isEditable }
+                    if (activeField != null) {
+                        try { activeField.node.refresh() } catch (_: Exception) {}
+                        actualText = activeField.node.text?.toString().orEmpty()
+                        hasField = true
+                        fieldFocused = activeField.node.isFocused || activeField.node.isAccessibilityFocused
+                        fieldEditable = activeField.node.isEditable || activeField.className.contains("EditText", ignoreCase = true)
+                    }
+                } finally {
+                    freshCandidates.forEach { it.node.recycle() }
+                }
+                if (hudFirstReadLen < 0) hudFirstReadLen = actualText.length
+
                 val intendedPin = lastIntendedPinForSession
                 val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val maskedFullLen = looksMasked && actualText.length == intendedLen
-                val digitsVisible = actualText.any { it.isDigit() }
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
-                val digitsMismatch = digitsVisible && intendedPin.isNotEmpty() && actualText != intendedPin
-                // STRICT: never click Send when the field text is null/empty or
-                // its length does not exactly match the expected PIN length.
-                val nullOrEmpty = rawText == null || actualText.isEmpty()
-                val wrongLength = actualText.length != intendedLen
-                if (activeField != null && (nullOrEmpty || wrongLength || digitsMismatch || (!digitsExact && !maskedFullLen))) {
-                    Log.w(
-                        TAG,
-                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength " +
-                            "digitsExact=$digitsExact digitsMismatch=$digitsMismatch maskedFullLen=$maskedFullLen actual='$actualText' expected='$intendedPin' — NOT clicking Send"
-                    )
-                    // Persist a reason so the user can see why the dialog didn't submit.
+                val ok = hasField && (digitsExact || maskedFullLen)
+
+                // Live HUD update during polling
+                showPinHud(
+                    status = if (ok) "READY → SEND" else "VERIFYING ${hudAttemptCount}/$maxAttempts",
+                    expected = intendedPin,
+                    actual = actualText,
+                    method = lastPinWriteDiagnostics?.method ?: "?",
+                    extra = "firstLen=$hudFirstReadLen focused=$fieldFocused editable=$fieldEditable"
+                )
+
+                if (!ok) {
+                    if (hudAttemptCount < maxAttempts) {
+                        root.recycle()
+                        handler.postDelayed(this, pollIntervalMs)
+                        return
+                    }
+                    // Exhausted attempts → block + persist reason
+                    val reason = "submit_timeout attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen finalLen=${actualText.length} masked=$looksMasked actual='$actualText' expected='$intendedPin'"
+                    Log.w(TAG, "🛑 Submit BLOCK after retries: $reason")
                     try {
                         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength masked=$looksMasked actual=$actualText expected=$intendedPin")
+                            .putString(KEY_LAST_PIN_DEBUG, reason)
                             .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
                             .apply()
                     } catch (_: Exception) {}
+                    showPinHud(
+                        status = "BLOCKED: field never filled",
+                        expected = intendedPin,
+                        actual = actualText,
+                        method = lastPinWriteDiagnostics?.method ?: "?",
+                        extra = "attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen"
+                    )
                     root.recycle()
-                    return@Runnable
+                    return
                 }
-                Log.d(
-                    TAG,
-                    "✅ Submit guard PASS: len=${actualText.length} digitsExact=$digitsExact maskedFullLen=$maskedFullLen"
-                )
-            } finally {
-                freshCandidates.forEach { it.node.recycle() }
-            }
-            pinSubmittedForSession = true
-            submitCount++
-            try {
-                val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
-                Log.d(
-                    TAG,
-                    "📨 Executing single submit [$source] submitCount=$submitCount sessionToken=$ussdSessionToken " +
-                        "submitLagMs=$submitLag verified=${lastPinWriteDiagnostics?.exactMatch == true}"
-                )
-                clickSendOrOkButton(root)
-            } finally {
-                root.recycle()
+
+                // ===== READY — click Send =====
+                pinSubmittedForSession = true
+                submitCount++
+                try {
+                    val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
+                    Log.d(
+                        TAG,
+                        "📨 Executing submit [$source] attempt=$hudAttemptCount submitCount=$submitCount " +
+                            "submitLagMs=$submitLag actualLen=${actualText.length}"
+                    )
+                    clickSendOrOkButton(root)
+                    showPinHud(
+                        status = "SENT ✓",
+                        expected = intendedPin,
+                        actual = actualText,
+                        method = lastPinWriteDiagnostics?.method ?: "?",
+                        extra = "attempts=$hudAttemptCount submitLagMs=$submitLag"
+                    )
+                } finally {
+                    root.recycle()
+                }
             }
         }
-        scheduledSubmitRunnable = r
-        handler.postDelayed(r, delayMs)
-        Log.d(TAG, "⏱️ Scheduled single submit in ${delayMs}ms [$source]")
+        scheduledSubmitRunnable = attemptRunnable
+        handler.postDelayed(attemptRunnable, delayMs)
+        Log.d(TAG, "⏱️ Scheduled retry-verify submit (first poll in ${delayMs}ms, up to $maxAttempts attempts) [$source]")
     }
 
     /**
