@@ -102,7 +102,8 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         onRequestBatteryOptimization = { requestBatteryOptimization() },
                         onOpenAccessibilitySettings = { openAccessibilitySettings() },
-                        checkServiceRunning = { isServiceRunning() }
+                        checkServiceRunning = { isServiceRunning() },
+                        onEnableOverlay = { openOverlayPermissionSettings() }
                     )
                 }
             }
