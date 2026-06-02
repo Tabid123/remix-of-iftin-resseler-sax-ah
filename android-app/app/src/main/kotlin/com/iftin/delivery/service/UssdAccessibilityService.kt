@@ -246,7 +246,8 @@ class UssdAccessibilityService : AccessibilityService() {
                 val activeField = freshCandidates.firstOrNull {
                     it.isVisible && it.isEnabled && it.isEditable
                 }
-                val actualText = activeField?.node?.text?.toString().orEmpty()
+                val rawText = activeField?.node?.text?.toString()
+                val actualText = rawText.orEmpty()
                 val intendedPin = lastIntendedPinForSession
                 val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
@@ -254,17 +255,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 val digitsVisible = actualText.any { it.isDigit() }
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
                 val digitsMismatch = digitsVisible && intendedPin.isNotEmpty() && actualText != intendedPin
-                if (activeField != null && (digitsMismatch || (!digitsExact && !maskedFullLen))) {
+                // STRICT: never click Send when the field text is null/empty or
+                // its length does not exactly match the expected PIN length.
+                val nullOrEmpty = rawText == null || actualText.isEmpty()
+                val wrongLength = actualText.length != intendedLen
+                if (activeField != null && (nullOrEmpty || wrongLength || digitsMismatch || (!digitsExact && !maskedFullLen))) {
                     Log.w(
                         TAG,
-                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen " +
+                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength " +
                             "digitsExact=$digitsExact digitsMismatch=$digitsMismatch maskedFullLen=$maskedFullLen actual='$actualText' expected='$intendedPin' — NOT clicking Send"
                     )
                     // Persist a reason so the user can see why the dialog didn't submit.
                     try {
                         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked actual=$actualText expected=$intendedPin")
+                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength masked=$looksMasked actual=$actualText expected=$intendedPin")
                             .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
                             .apply()
                     } catch (_: Exception) {}
