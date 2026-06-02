@@ -8,13 +8,19 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.Gravity
+import android.view.WindowManager
+import android.widget.TextView
 import android.util.Log
 import com.iftin.delivery.api.UssdFlowsClient
 import okhttp3.MediaType.Companion.toMediaType
@@ -184,6 +190,88 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var submitCount = 0
     @Volatile private var ignoredEventCount = 0
 
+    // ===== PIN HUD OVERLAY =====
+    // Visible system overlay that shows live PIN-write state on top of the USSD
+    // dialog so the user can see exactly what was typed without adb logcat.
+    private var hudView: TextView? = null
+    private var hudAttached = false
+    private val hudDismissRunnable = Runnable { hidePinHud() }
+    private var hudFirstReadLen = -1
+    private var hudAttemptCount = 0
+
+    private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
+        try {
+            // Require SYSTEM_ALERT_WINDOW permission (granted by user via Settings).
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                return
+            }
+            val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+            val maskedActual = if (actual.isEmpty()) "<empty>" else actual
+            val text = buildString {
+                append("🧪 PIN DEBUG\n")
+                append("Status: ").append(status).append('\n')
+                append("Expected: ").append(expected).append(" (len=").append(expected.length).append(")\n")
+                append("Actual:   ").append(maskedActual).append(" (len=").append(actual.length).append(")\n")
+                append("Method:   ").append(method)
+                if (extra.isNotBlank()) { append('\n').append(extra) }
+            }
+            handler.post {
+                try {
+                    if (hudView == null) {
+                        val tv = TextView(this)
+                        val bg = GradientDrawable().apply {
+                            cornerRadius = 18f
+                            setColor(AndroidColor.parseColor("#EE000000"))
+                            setStroke(3, AndroidColor.parseColor("#FFC107"))
+                        }
+                        tv.background = bg
+                        tv.setPadding(28, 24, 28, 24)
+                        tv.setTextColor(AndroidColor.parseColor("#FFEB3B"))
+                        tv.textSize = 13f
+                        tv.typeface = android.graphics.Typeface.MONOSPACE
+                        hudView = tv
+                    }
+                    hudView?.text = text
+                    if (!hudAttached) {
+                        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        else
+                            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+                        val lp = WindowManager.LayoutParams(
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            type,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                            android.graphics.PixelFormat.TRANSLUCENT
+                        )
+                        lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                        lp.y = 80
+                        wm.addView(hudView, lp)
+                        hudAttached = true
+                    }
+                    handler.removeCallbacks(hudDismissRunnable)
+                    handler.postDelayed(hudDismissRunnable, 8000L)
+                } catch (e: Exception) {
+                    Log.w(TAG, "HUD attach failed: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "showPinHud error: ${e.message}")
+        }
+    }
+
+    private fun hidePinHud() {
+        try {
+            if (hudAttached && hudView != null) {
+                val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                wm?.removeView(hudView)
+            }
+        } catch (_: Exception) {}
+        hudAttached = false
+    }
+
     private fun resetSessionState(reason: String) {
         pinFilledForSession = false
         pinVerifiedForSession = false
@@ -202,6 +290,8 @@ class UssdAccessibilityService : AccessibilityService() {
         submitCount = 0
         ignoredEventCount = 0
         isProcessingDialog = false
+        hudFirstReadLen = -1
+        hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
     }
 
