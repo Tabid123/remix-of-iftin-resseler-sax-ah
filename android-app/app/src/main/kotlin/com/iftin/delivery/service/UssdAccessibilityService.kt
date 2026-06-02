@@ -246,7 +246,8 @@ class UssdAccessibilityService : AccessibilityService() {
                 val activeField = freshCandidates.firstOrNull {
                     it.isVisible && it.isEnabled && it.isEditable
                 }
-                val actualText = activeField?.node?.text?.toString().orEmpty()
+                val rawText = activeField?.node?.text?.toString()
+                val actualText = rawText.orEmpty()
                 val intendedPin = lastIntendedPinForSession
                 val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
@@ -254,17 +255,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 val digitsVisible = actualText.any { it.isDigit() }
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
                 val digitsMismatch = digitsVisible && intendedPin.isNotEmpty() && actualText != intendedPin
-                if (activeField != null && (digitsMismatch || (!digitsExact && !maskedFullLen))) {
+                // STRICT: never click Send when the field text is null/empty or
+                // its length does not exactly match the expected PIN length.
+                val nullOrEmpty = rawText == null || actualText.isEmpty()
+                val wrongLength = actualText.length != intendedLen
+                if (activeField != null && (nullOrEmpty || wrongLength || digitsMismatch || (!digitsExact && !maskedFullLen))) {
                     Log.w(
                         TAG,
-                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen " +
+                        "🛑 Submit guard BLOCK: len=${actualText.length} intended=$intendedLen nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength " +
                             "digitsExact=$digitsExact digitsMismatch=$digitsMismatch maskedFullLen=$maskedFullLen actual='$actualText' expected='$intendedPin' — NOT clicking Send"
                     )
                     // Persist a reason so the user can see why the dialog didn't submit.
                     try {
                         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                             .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} masked=$looksMasked actual=$actualText expected=$intendedPin")
+                            .putString(KEY_LAST_PIN_DEBUG, "submit_blocked len=${actualText.length} nullOrEmpty=$nullOrEmpty wrongLength=$wrongLength masked=$looksMasked actual=$actualText expected=$intendedPin")
                             .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
                             .apply()
                     } catch (_: Exception) {}
@@ -520,7 +525,13 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
+        // Explicit prepare: ACTION_CLICK + ACTION_FOCUS on the input node so the
+        // dialog treats this EditText as the active target before we write.
+        try { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) {}
+        try { if (!node.isFocused) node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) } catch (_: Exception) {}
         focusEditableField(node)
+        // Trim any hidden whitespace/newlines from the PIN before insertion.
+        val safePin = pin.trim()
         // Samsung-friendly "dirty-loop": first set to empty (forces beforeTextChanged),
         // then set to the PIN (forces onTextChanged + afterTextChanged), then move
         // the cursor to the end. Without the empty pre-step, Samsung's numberPassword
@@ -533,15 +544,20 @@ class UssdAccessibilityService : AccessibilityService() {
         try { SystemClock.sleep(40L) } catch (_: Exception) {}
 
         val args = android.os.Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pin)
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, safePin)
         }
         val result = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        // Give Android OS ~180ms to register the characters in the EditText
+        // before any verification or submit can fire. Without this, fast
+        // submits can race ahead of the TextWatcher and the carrier receives
+        // an empty value → "Invalid PIN format".
+        try { SystemClock.sleep(180L) } catch (_: Exception) {}
 
         // Move the cursor to the end so the IME/dialog treats the value as committed.
         try {
             val selArgs = android.os.Bundle().apply {
-                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pin.length)
-                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pin.length)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, safePin.length)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, safePin.length)
             }
             node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
         } catch (_: Exception) { /* selection not critical */ }
