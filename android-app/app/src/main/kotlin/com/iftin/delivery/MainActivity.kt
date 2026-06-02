@@ -184,6 +184,20 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    private fun openOverlayPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "✅ PIN Debug Overlay already enabled", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun startDeliveryService() {
         val intent = Intent(this, UssdDialerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
