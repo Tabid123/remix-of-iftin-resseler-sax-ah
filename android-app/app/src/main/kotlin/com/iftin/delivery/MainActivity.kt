@@ -471,6 +471,26 @@ fun MainScreen(
                     color = Color(0xFFFF6F00)
                 )
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onEnableOverlay,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color(0xFFFFF8E1)
+                )
+            ) {
+                Text(
+                    text = "🧪 ENABLE PIN DEBUG OVERLAY",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFE65100)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
