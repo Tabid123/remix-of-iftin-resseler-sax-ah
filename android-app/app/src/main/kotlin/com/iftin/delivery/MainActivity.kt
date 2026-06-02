@@ -261,7 +261,8 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     onRequestBatteryOptimization: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
-    checkServiceRunning: () -> Boolean
+    checkServiceRunning: () -> Boolean,
+    onEnableOverlay: () -> Unit = {}
 ) {
     var isServiceRunning by remember { mutableStateOf(true) } // Assume running initially
     var totalDeliveries by remember { mutableStateOf(0) }
