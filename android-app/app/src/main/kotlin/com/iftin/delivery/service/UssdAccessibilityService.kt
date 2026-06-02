@@ -562,9 +562,26 @@ class UssdAccessibilityService : AccessibilityService() {
                 TAG,
                 "✅ safeEnterPin wrote and verified PIN (len=${cleanPin.length}, pinSetCount=$pinSetCount, suppress=1800ms, method=${lastPinWriteDiagnostics?.method})"
             )
+            showPinHud(
+                status = "WRITING ✓",
+                expected = cleanPin,
+                actual = lastPinWriteDiagnostics?.let { d ->
+                    // diagnostics doesn't store text; we just show length match
+                    if (d.exactMatch) cleanPin else "len=${d.actualValueLength}"
+                } ?: "?",
+                method = lastPinWriteDiagnostics?.method ?: "?",
+                extra = "pkg=$activePackage candidates=${candidates.size}"
+            )
         } else {
             pinWriteFailedForSession = true
             Log.w(TAG, "⚠️ safeEnterPin failed — no input method produced an exact 4-digit match")
+            showPinHud(
+                status = "WRITE FAIL",
+                expected = cleanPin,
+                actual = "",
+                method = lastPinWriteDiagnostics?.method ?: "?",
+                extra = "pkg=$activePackage candidates=${candidates.size} reason=${lastPinWriteDiagnostics?.failureReason ?: "?"}"
+            )
         }
         return ok
     }
