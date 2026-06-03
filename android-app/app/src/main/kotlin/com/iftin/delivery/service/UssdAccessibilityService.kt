@@ -1008,8 +1008,13 @@ class UssdAccessibilityService : AccessibilityService() {
                 append("editable=").append(diagnostics.isEditable).append('\n')
                 append("enabled=").append(diagnostics.isEnabled).append('\n')
                 append("visible=").append(diagnostics.isVisible).append('\n')
+                append("isPassword=").append(diagnostics.isPassword).append('\n')
+                append("maskedTreeLen=").append(diagnostics.maskedTreeLength).append('\n')
                 append("actualLen=").append(diagnostics.actualValueLength).append('\n')
                 append("exactMatch=").append(diagnostics.exactMatch).append('\n')
+                append("hudShown=").append(lastHudShown).append('\n')
+                append("hudError=").append(lastHudError.ifBlank { "none" }).append('\n')
+                append("intendedPin=").append(lastIntendedPinForSession).append('\n')
                 append("failure=").append(diagnostics.failureReason ?: "none")
             }
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
