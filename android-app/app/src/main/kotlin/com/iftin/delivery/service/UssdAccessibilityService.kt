@@ -74,7 +74,9 @@ class UssdAccessibilityService : AccessibilityService() {
         val isVisible: Boolean,
         val actualValueLength: Int,
         val exactMatch: Boolean,
-        val failureReason: String? = null
+        val failureReason: String? = null,
+        val isPassword: Boolean = false,
+        val maskedTreeLength: Int = 0
     )
 
     companion object {
