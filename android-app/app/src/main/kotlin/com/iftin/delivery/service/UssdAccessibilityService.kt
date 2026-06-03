@@ -933,12 +933,17 @@ class UssdAccessibilityService : AccessibilityService() {
         // (pure dialpad screen). When a dialog EditText is present, we require exact
         // digit match in the selected field — otherwise Somtel/Jeeb returns
         // "Invalid PIN format" because the visible field never received the PIN.
-        val maskedTreeLength = if (method == "gesture_keypad" && !hasRealEditableField) findMaskedPinLengthInTree(root) else 0
-        val maskedMatch = (
-            actual.length == intendedPin.length && actual.any { !it.isDigit() }
-        ) || (maskedTreeLength == intendedPin.length && maskedTreeLength > 0)
+        // For password fields the Accessibility API often returns empty/masked text by
+        // design (Android intentionally hides the value). We MUST trust length-based
+        // signals in those cases, otherwise the field looks empty and Send is blocked
+        // forever — leading to repeated "Invalid PIN format" loops.
+        val isPasswordField = try { candidate.node.isPassword } catch (_: Exception) { false }
+        val maskedTreeLength = findMaskedPinLengthInTree(root)
+        val maskedSelected = actual.isNotEmpty() && actual.all { it == '•' || it == '*' } && actual.length == intendedPin.length
         val exactDigitMatch = actual == intendedPin
-        val exactMatch = writeAttempted && (exactDigitMatch || maskedMatch)
+        val passwordLengthOk = isPasswordField && (actual.length == intendedPin.length || maskedTreeLength == intendedPin.length)
+        val maskedTreeOk = maskedTreeLength == intendedPin.length && maskedTreeLength > 0
+        val exactMatch = writeAttempted && (exactDigitMatch || maskedSelected || passwordLengthOk || maskedTreeOk)
 
         return PinWriteDiagnostics(
             method = method,
