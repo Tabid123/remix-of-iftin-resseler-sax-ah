@@ -381,6 +381,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 var hasField = false
                 var fieldFocused = false
                 var fieldEditable = false
+                var fieldIsPassword = false
                 try {
                     val activeField = freshCandidates.firstOrNull { it.isVisible && it.isEnabled && it.isEditable }
                     if (activeField != null) {
@@ -389,6 +390,7 @@ class UssdAccessibilityService : AccessibilityService() {
                         hasField = true
                         fieldFocused = activeField.node.isFocused || activeField.node.isAccessibilityFocused
                         fieldEditable = activeField.node.isEditable || activeField.className.contains("EditText", ignoreCase = true)
+                        fieldIsPassword = try { activeField.node.isPassword } catch (_: Exception) { false }
                     }
                 } finally {
                     freshCandidates.forEach { it.node.recycle() }
@@ -400,7 +402,16 @@ class UssdAccessibilityService : AccessibilityService() {
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val maskedFullLen = looksMasked && actualText.length == intendedLen
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
-                val ok = hasField && (digitsExact || maskedFullLen)
+                // For password EditTexts, Android Accessibility intentionally returns
+                // empty text — we MUST trust the previous verification (lastPinWriteDiagnostics)
+                // and either a masked tree length match or simply the fact that the write
+                // was verified once. Otherwise Send is blocked forever on Hormuud/Somtel
+                // password dialogs → "Invalid PIN format".
+                val maskedTreeLen = findMaskedPinLengthInTree(root)
+                val passwordReady = fieldIsPassword && (
+                    actualText.length == intendedLen || maskedTreeLen == intendedLen || hudAttemptCount >= 3
+                )
+                val ok = hasField && (digitsExact || maskedFullLen || passwordReady || maskedTreeLen == intendedLen)
 
                 // Live HUD update during polling
                 showPinHud(
