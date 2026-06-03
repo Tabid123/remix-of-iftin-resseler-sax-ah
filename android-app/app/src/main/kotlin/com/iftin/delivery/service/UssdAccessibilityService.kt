@@ -198,13 +198,11 @@ class UssdAccessibilityService : AccessibilityService() {
     private val hudDismissRunnable = Runnable { hidePinHud() }
     private var hudFirstReadLen = -1
     private var hudAttemptCount = 0
+    @Volatile private var lastHudShown = false
+    @Volatile private var lastHudError: String = ""
 
     private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
         try {
-            // Require SYSTEM_ALERT_WINDOW permission (granted by user via Settings).
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                return
-            }
             val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
             val maskedActual = if (actual.isEmpty()) "<empty>" else actual
             val text = buildString {
@@ -233,10 +231,10 @@ class UssdAccessibilityService : AccessibilityService() {
                     }
                     hudView?.text = text
                     if (!hudAttached) {
-                        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        else
-                            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+                        // TYPE_ACCESSIBILITY_OVERLAY draws on top of system dialogs (USSD/STK)
+                        // and does NOT require SYSTEM_ALERT_WINDOW. The accessibility service
+                        // permission alone is sufficient.
+                        val type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                         val lp = WindowManager.LayoutParams(
                             WindowManager.LayoutParams.WRAP_CONTENT,
                             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -250,14 +248,42 @@ class UssdAccessibilityService : AccessibilityService() {
                         lp.y = 80
                         wm.addView(hudView, lp)
                         hudAttached = true
+                        lastHudShown = true
+                        lastHudError = ""
                     }
                     handler.removeCallbacks(hudDismissRunnable)
                     handler.postDelayed(hudDismissRunnable, 8000L)
                 } catch (e: Exception) {
+                    lastHudShown = false
+                    lastHudError = e.javaClass.simpleName + ":" + (e.message ?: "?")
                     Log.w(TAG, "HUD attach failed: ${e.message}")
+                    // Fallback: try TYPE_APPLICATION_OVERLAY if accessibility overlay was rejected
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this@UssdAccessibilityService)) {
+                            val lp2 = WindowManager.LayoutParams(
+                                WindowManager.LayoutParams.WRAP_CONTENT,
+                                WindowManager.LayoutParams.WRAP_CONTENT,
+                                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                                android.graphics.PixelFormat.TRANSLUCENT
+                            )
+                            lp2.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                            lp2.y = 80
+                            wm.addView(hudView, lp2)
+                            hudAttached = true
+                            lastHudShown = true
+                            lastHudError = "fallback_app_overlay"
+                        }
+                    } catch (e2: Exception) {
+                        lastHudError = lastHudError + "|fallback:" + (e2.message ?: "?")
+                    }
                 }
             }
         } catch (e: Exception) {
+            lastHudShown = false
+            lastHudError = "outer:" + (e.message ?: "?")
             Log.w(TAG, "showPinHud error: ${e.message}")
         }
     }
