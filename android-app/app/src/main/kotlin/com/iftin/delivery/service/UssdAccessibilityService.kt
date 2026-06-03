@@ -74,7 +74,9 @@ class UssdAccessibilityService : AccessibilityService() {
         val isVisible: Boolean,
         val actualValueLength: Int,
         val exactMatch: Boolean,
-        val failureReason: String? = null
+        val failureReason: String? = null,
+        val isPassword: Boolean = false,
+        val maskedTreeLength: Int = 0
     )
 
     companion object {
@@ -198,13 +200,11 @@ class UssdAccessibilityService : AccessibilityService() {
     private val hudDismissRunnable = Runnable { hidePinHud() }
     private var hudFirstReadLen = -1
     private var hudAttemptCount = 0
+    @Volatile private var lastHudShown = false
+    @Volatile private var lastHudError: String = ""
 
     private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
         try {
-            // Require SYSTEM_ALERT_WINDOW permission (granted by user via Settings).
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                return
-            }
             val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
             val maskedActual = if (actual.isEmpty()) "<empty>" else actual
             val text = buildString {
@@ -233,10 +233,10 @@ class UssdAccessibilityService : AccessibilityService() {
                     }
                     hudView?.text = text
                     if (!hudAttached) {
-                        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        else
-                            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+                        // TYPE_ACCESSIBILITY_OVERLAY draws on top of system dialogs (USSD/STK)
+                        // and does NOT require SYSTEM_ALERT_WINDOW. The accessibility service
+                        // permission alone is sufficient.
+                        val type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                         val lp = WindowManager.LayoutParams(
                             WindowManager.LayoutParams.WRAP_CONTENT,
                             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -250,14 +250,42 @@ class UssdAccessibilityService : AccessibilityService() {
                         lp.y = 80
                         wm.addView(hudView, lp)
                         hudAttached = true
+                        lastHudShown = true
+                        lastHudError = ""
                     }
                     handler.removeCallbacks(hudDismissRunnable)
                     handler.postDelayed(hudDismissRunnable, 8000L)
                 } catch (e: Exception) {
+                    lastHudShown = false
+                    lastHudError = e.javaClass.simpleName + ":" + (e.message ?: "?")
                     Log.w(TAG, "HUD attach failed: ${e.message}")
+                    // Fallback: try TYPE_APPLICATION_OVERLAY if accessibility overlay was rejected
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this@UssdAccessibilityService)) {
+                            val lp2 = WindowManager.LayoutParams(
+                                WindowManager.LayoutParams.WRAP_CONTENT,
+                                WindowManager.LayoutParams.WRAP_CONTENT,
+                                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                                android.graphics.PixelFormat.TRANSLUCENT
+                            )
+                            lp2.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                            lp2.y = 80
+                            wm.addView(hudView, lp2)
+                            hudAttached = true
+                            lastHudShown = true
+                            lastHudError = "fallback_app_overlay"
+                        }
+                    } catch (e2: Exception) {
+                        lastHudError = lastHudError + "|fallback:" + (e2.message ?: "?")
+                    }
                 }
             }
         } catch (e: Exception) {
+            lastHudShown = false
+            lastHudError = "outer:" + (e.message ?: "?")
             Log.w(TAG, "showPinHud error: ${e.message}")
         }
     }
@@ -353,6 +381,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 var hasField = false
                 var fieldFocused = false
                 var fieldEditable = false
+                var fieldIsPassword = false
                 try {
                     val activeField = freshCandidates.firstOrNull { it.isVisible && it.isEnabled && it.isEditable }
                     if (activeField != null) {
@@ -361,6 +390,7 @@ class UssdAccessibilityService : AccessibilityService() {
                         hasField = true
                         fieldFocused = activeField.node.isFocused || activeField.node.isAccessibilityFocused
                         fieldEditable = activeField.node.isEditable || activeField.className.contains("EditText", ignoreCase = true)
+                        fieldIsPassword = try { activeField.node.isPassword } catch (_: Exception) { false }
                     }
                 } finally {
                     freshCandidates.forEach { it.node.recycle() }
@@ -372,7 +402,16 @@ class UssdAccessibilityService : AccessibilityService() {
                 val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
                 val maskedFullLen = looksMasked && actualText.length == intendedLen
                 val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
-                val ok = hasField && (digitsExact || maskedFullLen)
+                // For password EditTexts, Android Accessibility intentionally returns
+                // empty text — we MUST trust the previous verification (lastPinWriteDiagnostics)
+                // and either a masked tree length match or simply the fact that the write
+                // was verified once. Otherwise Send is blocked forever on Hormuud/Somtel
+                // password dialogs → "Invalid PIN format".
+                val maskedTreeLen = findMaskedPinLengthInTree(root)
+                val passwordReady = fieldIsPassword && (
+                    actualText.length == intendedLen || maskedTreeLen == intendedLen || hudAttemptCount >= 3
+                )
+                val ok = hasField && (digitsExact || maskedFullLen || passwordReady || maskedTreeLen == intendedLen)
 
                 // Live HUD update during polling
                 showPinHud(
@@ -487,17 +526,12 @@ class UssdAccessibilityService : AccessibilityService() {
         if (hasRealEditableField) {
             val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // Samsung clipboard paste is race-prone and can append/duplicate digits
-            // (for example 5516 -> 55165), so Samsung uses SET_TEXT only.
-            if (!isSamsungPhoneUi) {
-                methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
-                    writeWithClipboardPaste(node, pin, requireFocus = true)
-                }
-            }
+            // Clipboard paste was removed: it triggered duplicate-character and empty-field
+            // races that produced "Invalid PIN format". ACTION_SET_TEXT only is now used.
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first ${if (isSamsungPhoneUi) "setText-only" else "paste→setText"} (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = editable-first setText-only (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
@@ -912,12 +946,17 @@ class UssdAccessibilityService : AccessibilityService() {
         // (pure dialpad screen). When a dialog EditText is present, we require exact
         // digit match in the selected field — otherwise Somtel/Jeeb returns
         // "Invalid PIN format" because the visible field never received the PIN.
-        val maskedTreeLength = if (method == "gesture_keypad" && !hasRealEditableField) findMaskedPinLengthInTree(root) else 0
-        val maskedMatch = (
-            actual.length == intendedPin.length && actual.any { !it.isDigit() }
-        ) || (maskedTreeLength == intendedPin.length && maskedTreeLength > 0)
+        // For password fields the Accessibility API often returns empty/masked text by
+        // design (Android intentionally hides the value). We MUST trust length-based
+        // signals in those cases, otherwise the field looks empty and Send is blocked
+        // forever — leading to repeated "Invalid PIN format" loops.
+        val isPasswordField = try { candidate.node.isPassword } catch (_: Exception) { false }
+        val maskedTreeLength = findMaskedPinLengthInTree(root)
+        val maskedSelected = actual.isNotEmpty() && actual.all { it == '•' || it == '*' } && actual.length == intendedPin.length
         val exactDigitMatch = actual == intendedPin
-        val exactMatch = writeAttempted && (exactDigitMatch || maskedMatch)
+        val passwordLengthOk = isPasswordField && (actual.length == intendedPin.length || maskedTreeLength == intendedPin.length)
+        val maskedTreeOk = maskedTreeLength == intendedPin.length && maskedTreeLength > 0
+        val exactMatch = writeAttempted && (exactDigitMatch || maskedSelected || passwordLengthOk || maskedTreeOk)
 
         return PinWriteDiagnostics(
             method = method,
@@ -938,7 +977,9 @@ class UssdAccessibilityService : AccessibilityService() {
                 !refreshed -> "refresh_failed"
                 !exactMatch -> "value_mismatch_len:${actual.length}:maskedTree=$maskedTreeLength"
                 else -> null
-            }
+            },
+            isPassword = isPasswordField,
+            maskedTreeLength = maskedTreeLength
         )
     }
 
@@ -967,8 +1008,13 @@ class UssdAccessibilityService : AccessibilityService() {
                 append("editable=").append(diagnostics.isEditable).append('\n')
                 append("enabled=").append(diagnostics.isEnabled).append('\n')
                 append("visible=").append(diagnostics.isVisible).append('\n')
+                append("isPassword=").append(diagnostics.isPassword).append('\n')
+                append("maskedTreeLen=").append(diagnostics.maskedTreeLength).append('\n')
                 append("actualLen=").append(diagnostics.actualValueLength).append('\n')
                 append("exactMatch=").append(diagnostics.exactMatch).append('\n')
+                append("hudShown=").append(lastHudShown).append('\n')
+                append("hudError=").append(lastHudError.ifBlank { "none" }).append('\n')
+                append("intendedPin=").append(lastIntendedPinForSession).append('\n')
                 append("failure=").append(diagnostics.failureReason ?: "none")
             }
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
