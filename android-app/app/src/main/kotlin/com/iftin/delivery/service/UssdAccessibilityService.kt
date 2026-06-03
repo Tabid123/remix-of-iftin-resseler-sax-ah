@@ -513,17 +513,12 @@ class UssdAccessibilityService : AccessibilityService() {
         if (hasRealEditableField) {
             val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // Samsung clipboard paste is race-prone and can append/duplicate digits
-            // (for example 5516 -> 55165), so Samsung uses SET_TEXT only.
-            if (!isSamsungPhoneUi) {
-                methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
-                    writeWithClipboardPaste(node, pin, requireFocus = true)
-                }
-            }
+            // Clipboard paste was removed: it triggered duplicate-character and empty-field
+            // races that produced "Invalid PIN format". ACTION_SET_TEXT only is now used.
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first ${if (isSamsungPhoneUi) "setText-only" else "paste→setText"} (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = editable-first setText-only (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
