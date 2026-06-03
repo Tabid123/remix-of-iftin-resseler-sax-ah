@@ -966,7 +966,9 @@ class UssdAccessibilityService : AccessibilityService() {
                 !refreshed -> "refresh_failed"
                 !exactMatch -> "value_mismatch_len:${actual.length}:maskedTree=$maskedTreeLength"
                 else -> null
-            }
+            },
+            isPassword = isPasswordField,
+            maskedTreeLength = maskedTreeLength
         )
     }
 
