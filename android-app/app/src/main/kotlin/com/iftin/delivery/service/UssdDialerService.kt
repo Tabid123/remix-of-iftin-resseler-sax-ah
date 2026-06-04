@@ -1187,7 +1187,7 @@ class UssdDialerService : Service() {
                 }
                 return
             }
-            val pinToUse = cleanPin
+            val pinToUse = cleanPin.take(4)
             // Compute trigger code from USSD (e.g. *725*..#  ->  *725#) for flow lookup
             val triggerCode = run {
                 val u = order.ussdCode
