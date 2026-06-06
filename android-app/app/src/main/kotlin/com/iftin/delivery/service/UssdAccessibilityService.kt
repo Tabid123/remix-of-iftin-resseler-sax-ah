@@ -652,7 +652,8 @@ class UssdAccessibilityService : AccessibilityService() {
                                 isEditable = node.isEditable || className.contains("EditText", ignoreCase = true),
                                 isEnabled = node.isEnabled,
                                 isVisible = visible,
-                                existingTextLength = node.text?.length ?: 0
+                                existingTextLength = node.text?.length ?: 0,
+                                isPassword = try { node.isPassword } catch (_: Exception) { false }
                             )
                         )
                     }
@@ -684,7 +685,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 "🧮 Candidate[$index] class=${candidate.className.ifBlank { "unknown" }} viewId=${candidate.viewId.ifBlank { "n/a" }} " +
                     "visible=${candidate.isVisible} enabled=${candidate.isEnabled} editable=${candidate.isEditable} " +
                     "focused=${candidate.isFocused} a11yFocused=${candidate.isAccessibilityFocused} " +
-                    "textLen=${candidate.existingTextLength} bounds=${formatRect(candidate.bounds)}"
+                    "textLen=${candidate.existingTextLength} password=${candidate.isPassword} bounds=${formatRect(candidate.bounds)}"
             )
         }
     }
