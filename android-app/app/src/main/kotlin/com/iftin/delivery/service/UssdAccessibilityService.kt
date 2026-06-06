@@ -57,7 +57,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val isEditable: Boolean,
         val isEnabled: Boolean,
         val isVisible: Boolean,
-        val existingTextLength: Int
+        val existingTextLength: Int,
+        val isPassword: Boolean
     )
 
     private data class PinWriteDiagnostics(
@@ -525,13 +526,21 @@ class UssdAccessibilityService : AccessibilityService() {
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
             val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+            val isStkDialog = activePackage.contains("stk", ignoreCase = true) || activePackage.contains("toolkit", ignoreCase = true)
+            val preferredIsPassword = try { preferred.node.isPassword } catch (_: Exception) { preferred.isPassword }
             // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
             // Clipboard paste was removed: it triggered duplicate-character and empty-field
             // races that produced "Invalid PIN format". ACTION_SET_TEXT only is now used.
+            if (preferredIsPassword || isStkDialog || isSamsungPhoneUi) {
+                methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
+                    focusEditableField(node, requireAccessibilityFocus = true)
+                    dispatchGestureKeypad(root, pin)
+                }
+            }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first setText-only (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi)")
+            Log.d(TAG, "🧭 PIN path = editable-first methods=${methods.map { it.first }} (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi, stk=$isStkDialog, password=$preferredIsPassword)")
         } else {
             // Pure dialpad screen — last-resort gesture taps on dialer digits
             methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
@@ -643,7 +652,8 @@ class UssdAccessibilityService : AccessibilityService() {
                                 isEditable = node.isEditable || className.contains("EditText", ignoreCase = true),
                                 isEnabled = node.isEnabled,
                                 isVisible = visible,
-                                existingTextLength = node.text?.length ?: 0
+                                existingTextLength = node.text?.length ?: 0,
+                                isPassword = try { node.isPassword } catch (_: Exception) { false }
                             )
                         )
                     }
@@ -675,7 +685,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 "🧮 Candidate[$index] class=${candidate.className.ifBlank { "unknown" }} viewId=${candidate.viewId.ifBlank { "n/a" }} " +
                     "visible=${candidate.isVisible} enabled=${candidate.isEnabled} editable=${candidate.isEditable} " +
                     "focused=${candidate.isFocused} a11yFocused=${candidate.isAccessibilityFocused} " +
-                    "textLen=${candidate.existingTextLength} bounds=${formatRect(candidate.bounds)}"
+                    "textLen=${candidate.existingTextLength} password=${candidate.isPassword} bounds=${formatRect(candidate.bounds)}"
             )
         }
     }
