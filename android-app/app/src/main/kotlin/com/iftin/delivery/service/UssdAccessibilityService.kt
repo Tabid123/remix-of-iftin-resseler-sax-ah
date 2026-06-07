@@ -333,33 +333,25 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
-        // ===== AUTO-FILL ONLY MODE =====
-        // When auto_send_pin is false (default), the service fills the PIN but
-        // intentionally does NOT click Send. The user reviews the PIN on the
-        // carrier dialog and presses Send themselves. This eliminates the
-        // "Invalid PIN format" race where the carrier receives Send before its
-        // own TextWatcher has registered the typed PIN.
-        val autoSendPin = try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean("auto_send_pin", false)
-        } catch (_: Exception) { false }
-        if (!autoSendPin) {
-            pinSubmittedForSession = true  // prevent re-scheduling on subsequent events
-            val diagInfo = lastPinWriteDiagnostics
-            Log.i(
-                TAG,
-                "✋ submitPinOnce[$source] suppressed — auto_send_pin=false. " +
-                    "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
-            )
-            showPinHud(
-                status = "FILLED — press Send",
-                expected = lastIntendedPinForSession,
-                actual = "",
-                method = diagInfo?.method ?: "none",
-                extra = "autoSend=false awaitingUserConfirm=true"
-            )
-            return
-        }
+        // ===== HARD STOP: NEVER AUTO-SEND PIN =====
+        // A previously persisted auto_send_pin=true on the device can still make
+        // old builds auto-click Send. To fully eliminate the carrier-side race
+        // that causes "Invalid PIN format", PIN screens are now ALWAYS fill-only.
+        pinSubmittedForSession = true
+        val diagInfo = lastPinWriteDiagnostics
+        Log.i(
+            TAG,
+            "✋ submitPinOnce[$source] suppressed — PIN auto-send is permanently disabled. " +
+                "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
+        )
+        showPinHud(
+            status = "FILLED — press Send",
+            expected = lastIntendedPinForSession,
+            actual = "",
+            method = diagInfo?.method ?: "none",
+            extra = "autoSend=false hardStop=true awaitingUserConfirm=true"
+        )
+        return
         val diag = lastPinWriteDiagnostics
         if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession || !pinFieldFocusedForSession || !pinFieldEditableForSession) {
             Log.w(
@@ -1244,6 +1236,32 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
             
+            // Hard-stop generic auto-confirm on PIN/input dialogs. Without this,
+            // a carrier dialog can evade the simple text matcher above and the
+            // generic Send/OK loop below would still press Send after we filled.
+            val rootForGuard = rootInActiveWindow ?: source
+            val hasEditableInput = try {
+                val candidates = collectEditableFieldCandidates(rootForGuard)
+                try {
+                    candidates.any { it.isVisible && it.isEnabled && it.isEditable }
+                } finally {
+                    candidates.forEach { it.node.recycle() }
+                }
+            } catch (_: Exception) { false }
+            if (hasEditableInput && pinFilledForSession) {
+                Log.i(TAG, "✋ Generic confirm suppressed — PIN/input dialog awaiting manual Send")
+                showPinHud(
+                    status = "FILLED — press Send",
+                    expected = lastIntendedPinForSession,
+                    actual = "",
+                    method = lastPinWriteDiagnostics?.method ?: "none",
+                    extra = "genericConfirmSuppressed=true awaitingUserConfirm=true"
+                )
+                if (rootForGuard !== source) rootForGuard.recycle()
+                source.recycle()
+                return
+            }
+
             // Search for clickable buttons with confirm text
             for (buttonText in CONFIRM_BUTTONS) {
                 val nodes = source.findAccessibilityNodeInfosByText(buttonText)
