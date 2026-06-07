@@ -1,80 +1,52 @@
-# Qorshaha xalka
+## Hadafka
 
-## Waxa hadda dhab ahaan khaldan
-- **HUD-ka ma muuqdo** sababtoo ah service-ku wuxuu isticmaalayaa `TYPE_APPLICATION_OVERLAY` isla markaana `showPinHud()` si toos ah ayuu u joojinayaa haddii `Settings.canDrawOverlays()` aanu true ahayn. USSD/STK dialogs badankood waxaa si ka fiican uga sarreeya `TYPE_ACCESSIBILITY_OVERLAY`, mana u baahna isla overlay permission-ka caadiga ah.
-- **`invalid pin format` wali wuu dhici karaa** sababtoo ah code-ku weli wuxuu isticmaalayaa **`clipboard_paste` first** marka editable field la helo (non-Samsung), inkastoo dhibaatadii hore halkaas ka timid.
-- **Verification-ku aad buu ugu tiirsan yahay `node.text`**, laakiin PIN/password fields qaar Android Accessibility waxay u soo celiyaan `""` ama masked value oo keliya. Sidaas darteed service-ku mararka qaar si khaldan ayuu u go'aamiyaa in field-ku sax yahay ama madhan yahay.
+Marka USSD dialog-ga PIN-ka uu soo baxo, app-ku **wuxuu kaliya buuxin doonaa PIN-ka** ee ma riixi doono badhanka **Send/OK**. Adiga ayaa gacanta ku riixaya Send markaad aragto in PIN-ku si sax ah u soo galay. Tani waxay baabi'in doontaa "invalid pin format" sababtoo ah:
 
-## Do I know what the issue is?
-**Haa.** Dhibaatadu waa laba qaybood oo isku biiray:
-1. HUD-ka laftiisa si qaldan ayaa loo sameeyay, markaa mobilka korkiisa kama soo muuqdo.
-2. Qoraalka PIN-ka wali waxaa marin u ah clipboard path + verification aan ku filnayn password fields, taasina waxay keeni kartaa in carrier-ku helo PIN aan sax ahayn ama aan si buuxda u register-garin.
+- Carrier-ka wuxuu helayaa PIN-ka oo si dhammeystiran u soo galay (ma jiro race condition u dhexeeya set_text iyo click Send).
+- Haddii field-ku yahay masked/password oo accessibility-gu si khaldan u verify gareeyo, mar dambe Send lama riixayo kahor inta aanad adigu hubin.
+- Adiga ayaa noqonaya verification-ka ugu dambeeya — taas oo 100% sax ah.
 
-## Faylasha aan taaban doono
-- `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdAccessibilityService.kt`
-- `android-app/app/src/main/kotlin/com/iftin/delivery/MainActivity.kt`
-- `android-app/app/src/main/AndroidManifest.xml`
+## Wax la beddelayo
 
-## Waxa la beddeli doono
+Faylka kaliya: `android-app/app/src/main/kotlin/com/iftin/delivery/service/UssdAccessibilityService.kt`
 
-### 1) HUD-ka waxaan u wareejin doonaa accessibility overlay sax ah
-- Ka beddel `TYPE_APPLICATION_OVERLAY` una wareeji **`TYPE_ACCESSIBILITY_OVERLAY`** gudaha `UssdAccessibilityService`.
-- Ka saari doonaa dependency-ga adag ee `Settings.canDrawOverlays()` si HUD-ku uga shaqeeyo sida accessibility service overlay.
-- Haddii addView fashilmo, waxaan kaydin doonaa sababta fashilka gudaha debug snapshot si aan indhaha uga aragno sababta uu u baaqday.
+### 1) Auto-press Send waa la xidhayaa PIN dialogs
+- Marka dialog la aqoonsado inuu yahay PIN/password prompt:
+  - Geli PIN-ka (`ACTION_SET_TEXT` ama gesture keypad sida hadda).
+  - **Ka boodi** qaybta `clickSendButton()` / submit gesture.
+  - Ku dar HUD/notification gaaban: "PIN waa la buuxiyay — fadlan riix Send".
+- Dialogs aan ahayn PIN (tusaale confirmation "1. Yes") way sii shaqayn doonaan sida hadda (auto-confirm).
 
-### 2) Clipboard path-ka waan ka saari doonaa PIN editable dialogs
-- Marka PIN dialog uu leeyahay editable field, flow-gu wuxuu noqon doonaa **ACTION_CLICK -> ACTION_FOCUS -> ACTION_SET_TEXT only**.
-- `rawPin` waxaa lagu mari doonaa `.trim()` ka hor qorista.
-- Delay-ga qorista kadib waxaan ka dhigi doonaa mid cad oo joogto ah (`150ms–200ms`) ka hor verification/submit.
-- `clipboard_paste` looma adeegsan doono PIN dialogs-ka caadiga ah.
+### 2) Setting/flag cusub: `auto_send_pin = false` (default)
+- Lagu kaydin doono `SharedPreferences` (`auto_send_pin`).
+- Default = `false` (auto-fill only).
+- Hadii mustaqbalka loo baahdo, mid kale ayaa la furi karaa, laakiin **default-ka waa OFF**.
+- Logic-ga: haddii `auto_send_pin == false`, ka boodi click-ka Send button-ka kaliya PIN screens.
 
-### 3) Verification-ka waxaan ka dhigi doonaa mid la jaanqaada password fields
-- Haddii field-ku yahay password/masked field, verification-ku kuma ekaan doono `node.text == pin` oo keliya.
-- Waxaan hubin doonaa calaamado badan:
-  - exact digits haddii ay muuqdaan
-  - masked length haddii field-ku uu soo celiyo `••••`
-  - tree-level masked length haddii selected node text uu madhan yahay
-  - field focus/editable state waqtiga submit-ka
-- Send lama riixi doono haddii field-ku wali u ekaado madhan ama length-ku aanu la mid ahayn PIN-ka la filayo.
+### 3) Diagnostics-ka HUD/`KEY_LAST_PIN_DEBUG`
+- Ku dar `autoSend=false` iyo `awaitingUserConfirm=true` si aad screen-ka uga aragto in app-ku si ula kac ah u sugayo gacanta user-ka.
 
-### 4) Diagnostics-ka waxaan ka dhigi doonaa kuwo dhab ahaan wax sheegaya
-- `KEY_LAST_PIN_DEBUG` waxaan ku dari doonaa:
-  - `overlayShown=true/false`
-  - `overlayError=...`
-  - `fieldIsPassword=true/false`
-  - `actualTextLen`
-  - `maskedTreeLen`
-  - `method=action_set_text_only`
-  - `attempts=N/10`
-- `MainActivity` debug card-ka waxaan ka dhigi doonaa inuu muujiyo xogtan si xitaa haddii HUD-ku mar kale bixi waayo, aad mobilka screen-ka app-ka gudihiisa uga aragto sababta.
+### 4) Retry/timeout
+- Haddii 60 ilbiriqsi gudahood user-ku riixin Send, mark order-ka `awaiting_user_confirm` si delivery worker uusan u retry gareyn dialog-ka furan.
 
-### 5) Rebuild iyo xaqiijin
-- Waxaan dhisi doonaa APK cusub.
-- Markaan implement gareeyo, xaqiijinta aan sameyn doono waa:
-  - HUD logic-ku mar dambe aanu ku xirnayn overlay permission-ka caadiga ah
-  - method-ku aanu mar dambe ahayn `clipboard_paste`
-  - debug snapshot-ku si cad u sheego haddii field-ku yahay password/masked
-  - submit guard-ku aanu dirin Send ilaa length sax ahi muuqdo
+## Waxa aan la beddelin
+- Logic-ga PIN cleaning/`.take(4)` ee hadda jirta way sii socon doontaa.
+- Provider routing, SIM selection, iyo bulk SMS flow midna lama taabanayo.
+- Confirmation dialogs (Yes/No) wali si automatic ah ayaa loo riixayaa — kaliya PIN entry ayaa user-ka loo daayay.
 
-## Faahfaahin farsamo
+## Tallaabada Somtel (mustaqbalka)
+Codsigaaga labaad (Somtel inuu PIN-ka galiyo tallaabada ugu dambeeysa kadib amount/number) wuxuu u baahan yahay provider flow editor / `ussd_flow_steps` rework. Tani waa qorshe gaar ah oo ka weyn; haddii aad rabto, kadib markaan dhamayno auto-fill-only fix-ka, ayaan u qaadan karnaa qorshe labaad oo gaar ah.
+
+## Farsamada gudaha
+
 ```text
-Old path:
-PIN dialog -> clipboard_paste or set_text -> weak verify(node.text) -> Send
+Hadda:
+PIN dialog -> setText(PIN) -> verify -> clickSend  (khalad halkan)
 
-New path:
-PIN dialog -> click+focus -> ACTION_SET_TEXT(trimmed PIN) -> 180ms wait
--> verify via exact/masked/tree-length -> Send only if exact length confirmed
-
-HUD:
-TYPE_APPLICATION_OVERLAY + canDrawOverlays gate
-becomes
-TYPE_ACCESSIBILITY_OVERLAY + service-owned overlay diagnostics
+Cusub:
+PIN dialog -> setText(PIN) -> verify -> STOP
+            -> HUD: "Riix Send"
+            -> sug user-ka
 ```
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
-
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+Tallaabooyinka rebuild-ka: `scripts/build-android.sh` kadibna `apk-output/iftin-delivery.apk` ayaa cusboonaysiineysa.
