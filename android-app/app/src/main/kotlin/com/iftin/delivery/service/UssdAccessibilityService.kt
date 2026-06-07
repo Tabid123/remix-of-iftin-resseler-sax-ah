@@ -333,176 +333,26 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
-        // ===== AUTO-FILL ONLY MODE =====
-        // When auto_send_pin is false (default), the service fills the PIN but
-        // intentionally does NOT click Send. The user reviews the PIN on the
-        // carrier dialog and presses Send themselves. This eliminates the
-        // "Invalid PIN format" race where the carrier receives Send before its
-        // own TextWatcher has registered the typed PIN.
-        val autoSendPin = try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean("auto_send_pin", false)
-        } catch (_: Exception) { false }
-        if (!autoSendPin) {
-            pinSubmittedForSession = true  // prevent re-scheduling on subsequent events
-            val diagInfo = lastPinWriteDiagnostics
-            Log.i(
-                TAG,
-                "✋ submitPinOnce[$source] suppressed — auto_send_pin=false. " +
-                    "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
-            )
-            showPinHud(
-                status = "FILLED — press Send",
-                expected = lastIntendedPinForSession,
-                actual = "",
-                method = diagInfo?.method ?: "none",
-                extra = "autoSend=false awaitingUserConfirm=true"
-            )
-            return
-        }
-        val diag = lastPinWriteDiagnostics
-        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession || !pinFieldFocusedForSession || !pinFieldEditableForSession) {
-            Log.w(
-                TAG,
-                "🛑 submitPinOnce[$source] blocked — filled=$pinFilledForSession verified=$pinVerifiedForSession " +
-                    "writeFailed=$pinWriteFailedForSession focused=$pinFieldFocusedForSession editable=$pinFieldEditableForSession " +
-                    "diag=${diag?.method ?: "none"}/${diag?.actualValueLength ?: -1}"
-            )
-            showPinHud(
-                status = "BLOCKED: precheck",
-                expected = lastIntendedPinForSession,
-                actual = "",
-                method = diag?.method ?: "none",
-                extra = "filled=$pinFilledForSession verified=$pinVerifiedForSession focused=$pinFieldFocusedForSession"
-            )
-            return
-        }
-        scheduledSubmitRunnable?.let {
-            handler.removeCallbacks(it)
-            Log.d(TAG, "🧹 Cancelled prior scheduled submit before re-scheduling [$source]")
-        }
-        // ===== RETRY-WITH-VERIFY LOOP =====
-        // Instead of a single guard check 600ms after write, we poll the field up
-        // to maxAttempts × pollIntervalMs and only click Send once the visible
-        // text matches the intended PIN (digits or full-length mask). This fixes
-        // Hormuud/Somtel TextWatcher delay → "Invalid PIN format" loops where the
-        // field is empty at the moment of the previous one-shot check.
-        val maxAttempts = 10
-        val pollIntervalMs = 150L
-        hudAttemptCount = 0
-        hudFirstReadLen = -1
-        val attemptRunnable = object : Runnable {
-            override fun run() {
-                if (pinSubmittedForSession) return
-                hudAttemptCount++
-                val root = rootInActiveWindow
-                if (root == null) {
-                    if (hudAttemptCount < maxAttempts) {
-                        handler.postDelayed(this, pollIntervalMs)
-                    } else {
-                        showPinHud("BLOCKED: no root window", lastIntendedPinForSession, "", lastPinWriteDiagnostics?.method ?: "?", "attempts=$hudAttemptCount/$maxAttempts")
-                    }
-                    return
-                }
-                val freshCandidates = collectEditableFieldCandidates(root)
-                var actualText = ""
-                var hasField = false
-                var fieldFocused = false
-                var fieldEditable = false
-                var fieldIsPassword = false
-                try {
-                    val activeField = freshCandidates.firstOrNull { it.isVisible && it.isEnabled && it.isEditable }
-                    if (activeField != null) {
-                        try { activeField.node.refresh() } catch (_: Exception) {}
-                        actualText = activeField.node.text?.toString().orEmpty()
-                        hasField = true
-                        fieldFocused = activeField.node.isFocused || activeField.node.isAccessibilityFocused
-                        fieldEditable = activeField.node.isEditable || activeField.className.contains("EditText", ignoreCase = true)
-                        fieldIsPassword = try { activeField.node.isPassword } catch (_: Exception) { false }
-                    }
-                } finally {
-                    freshCandidates.forEach { it.node.recycle() }
-                }
-                if (hudFirstReadLen < 0) hudFirstReadLen = actualText.length
-
-                val intendedPin = lastIntendedPinForSession
-                val intendedLen = if (intendedPin.isNotEmpty()) intendedPin.length else 4
-                val looksMasked = actualText.isNotEmpty() && actualText.all { it == '•' || it == '*' }
-                val maskedFullLen = looksMasked && actualText.length == intendedLen
-                val digitsExact = intendedPin.isNotEmpty() && actualText == intendedPin
-                // For password EditTexts, Android Accessibility intentionally returns
-                // empty text — we MUST trust the previous verification (lastPinWriteDiagnostics)
-                // and either a masked tree length match or simply the fact that the write
-                // was verified once. Otherwise Send is blocked forever on Hormuud/Somtel
-                // password dialogs → "Invalid PIN format".
-                val maskedTreeLen = findMaskedPinLengthInTree(root)
-                val passwordReady = fieldIsPassword && (
-                    actualText.length == intendedLen || maskedTreeLen == intendedLen || hudAttemptCount >= 3
-                )
-                val ok = hasField && (digitsExact || maskedFullLen || passwordReady || maskedTreeLen == intendedLen)
-
-                // Live HUD update during polling
-                showPinHud(
-                    status = if (ok) "READY → SEND" else "VERIFYING ${hudAttemptCount}/$maxAttempts",
-                    expected = intendedPin,
-                    actual = actualText,
-                    method = lastPinWriteDiagnostics?.method ?: "?",
-                    extra = "firstLen=$hudFirstReadLen focused=$fieldFocused editable=$fieldEditable"
-                )
-
-                if (!ok) {
-                    if (hudAttemptCount < maxAttempts) {
-                        root.recycle()
-                        handler.postDelayed(this, pollIntervalMs)
-                        return
-                    }
-                    // Exhausted attempts → block + persist reason
-                    val reason = "submit_timeout attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen finalLen=${actualText.length} masked=$looksMasked actual='$actualText' expected='$intendedPin'"
-                    Log.w(TAG, "🛑 Submit BLOCK after retries: $reason")
-                    try {
-                        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                            .edit()
-                            .putString(KEY_LAST_PIN_DEBUG, reason)
-                            .putLong(KEY_LAST_PIN_DEBUG_TIME, System.currentTimeMillis())
-                            .apply()
-                    } catch (_: Exception) {}
-                    showPinHud(
-                        status = "BLOCKED: field never filled",
-                        expected = intendedPin,
-                        actual = actualText,
-                        method = lastPinWriteDiagnostics?.method ?: "?",
-                        extra = "attempts=$hudAttemptCount/$maxAttempts firstLen=$hudFirstReadLen"
-                    )
-                    root.recycle()
-                    return
-                }
-
-                // ===== READY — click Send =====
-                pinSubmittedForSession = true
-                submitCount++
-                try {
-                    val submitLag = if (lastPinWriteAtMs > 0L) System.currentTimeMillis() - lastPinWriteAtMs else -1L
-                    Log.d(
-                        TAG,
-                        "📨 Executing submit [$source] attempt=$hudAttemptCount submitCount=$submitCount " +
-                            "submitLagMs=$submitLag actualLen=${actualText.length}"
-                    )
-                    clickSendOrOkButton(root)
-                    showPinHud(
-                        status = "SENT ✓",
-                        expected = intendedPin,
-                        actual = actualText,
-                        method = lastPinWriteDiagnostics?.method ?: "?",
-                        extra = "attempts=$hudAttemptCount submitLagMs=$submitLag"
-                    )
-                } finally {
-                    root.recycle()
-                }
-            }
-        }
-        scheduledSubmitRunnable = attemptRunnable
-        handler.postDelayed(attemptRunnable, delayMs)
-        Log.d(TAG, "⏱️ Scheduled retry-verify submit (first poll in ${delayMs}ms, up to $maxAttempts attempts) [$source]")
+        // ===== HARD STOP: NEVER AUTO-SEND PIN =====
+        // A previously persisted auto_send_pin=true on the device can still make
+        // old builds auto-click Send. To fully eliminate the carrier-side race
+        // that causes "Invalid PIN format", PIN screens are now ALWAYS fill-only.
+        pinSubmittedForSession = true
+        val diagInfo = lastPinWriteDiagnostics
+        Log.i(
+            TAG,
+            "✋ submitPinOnce[$source] suppressed — PIN auto-send is permanently disabled. " +
+                "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
+        )
+        showPinHud(
+            status = "FILLED — press Send",
+            expected = lastIntendedPinForSession,
+            actual = "",
+            method = diagInfo?.method ?: "none",
+            extra = "autoSend=false hardStop=true awaitingUserConfirm=true"
+        )
+        scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
+        scheduledSubmitRunnable = null
     }
 
     /**
@@ -1244,6 +1094,32 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
             
+            // Hard-stop generic auto-confirm on PIN/input dialogs. Without this,
+            // a carrier dialog can evade the simple text matcher above and the
+            // generic Send/OK loop below would still press Send after we filled.
+            val rootForGuard = rootInActiveWindow ?: source
+            val hasEditableInput = try {
+                val candidates = collectEditableFieldCandidates(rootForGuard)
+                try {
+                    candidates.any { it.isVisible && it.isEnabled && it.isEditable }
+                } finally {
+                    candidates.forEach { it.node.recycle() }
+                }
+            } catch (_: Exception) { false }
+            if (hasEditableInput && pinFilledForSession) {
+                Log.i(TAG, "✋ Generic confirm suppressed — PIN/input dialog awaiting manual Send")
+                showPinHud(
+                    status = "FILLED — press Send",
+                    expected = lastIntendedPinForSession,
+                    actual = "",
+                    method = lastPinWriteDiagnostics?.method ?: "none",
+                    extra = "genericConfirmSuppressed=true awaitingUserConfirm=true"
+                )
+                if (rootForGuard !== source) rootForGuard.recycle()
+                source.recycle()
+                return
+            }
+
             // Search for clickable buttons with confirm text
             for (buttonText in CONFIRM_BUTTONS) {
                 val nodes = source.findAccessibilityNodeInfosByText(buttonText)
