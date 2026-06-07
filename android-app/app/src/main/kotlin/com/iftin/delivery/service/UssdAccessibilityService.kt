@@ -333,6 +333,33 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
+        // ===== AUTO-FILL ONLY MODE =====
+        // When auto_send_pin is false (default), the service fills the PIN but
+        // intentionally does NOT click Send. The user reviews the PIN on the
+        // carrier dialog and presses Send themselves. This eliminates the
+        // "Invalid PIN format" race where the carrier receives Send before its
+        // own TextWatcher has registered the typed PIN.
+        val autoSendPin = try {
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean("auto_send_pin", false)
+        } catch (_: Exception) { false }
+        if (!autoSendPin) {
+            pinSubmittedForSession = true  // prevent re-scheduling on subsequent events
+            val diagInfo = lastPinWriteDiagnostics
+            Log.i(
+                TAG,
+                "✋ submitPinOnce[$source] suppressed — auto_send_pin=false. " +
+                    "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
+            )
+            showPinHud(
+                status = "FILLED — press Send",
+                expected = lastIntendedPinForSession,
+                actual = "",
+                method = diagInfo?.method ?: "none",
+                extra = "autoSend=false awaitingUserConfirm=true"
+            )
+            return
+        }
         val diag = lastPinWriteDiagnostics
         if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession || !pinFieldFocusedForSession || !pinFieldEditableForSession) {
             Log.w(
