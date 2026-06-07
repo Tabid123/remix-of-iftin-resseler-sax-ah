@@ -1501,10 +1501,9 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
-        val normalizedText = dialogText.orEmpty().lowercase()
-        val looksLikePinPrompt = normalizedText.contains("pin") ||
-            normalizedText.contains("password") ||
-            normalizedText.contains("furaha")
+        if (shouldHardStopForPinStage(root, dialogText)) {
+            return true
+        }
 
         val hasEditableInput = try {
             val candidates = collectEditableFieldCandidates(root)
@@ -1515,7 +1514,7 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         } catch (_: Exception) { false }
 
-        return pinFilledForSession && (looksLikePinPrompt || hasEditableInput)
+        return pinFilledForSession && hasEditableInput
     }
     
     /**
@@ -1524,8 +1523,13 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
             val dialogText = extractDialogText(root)
+            if (shouldHardStopForPinStage(root, dialogText)) {
+                engagePinHardStop(dialogText)
+                Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
+                return
+            }
             if (shouldSuppressAutoClickForDialog(root, dialogText)) {
-                Log.i(TAG, "✋ clickSendOrOkButton suppressed — PIN dialog requires manual Send")
+                Log.i(TAG, "✋ clickSendOrOkButton suppressed — editable dialog awaiting manual action")
                 return
             }
             // Priority order: Send > OK > Confirm
