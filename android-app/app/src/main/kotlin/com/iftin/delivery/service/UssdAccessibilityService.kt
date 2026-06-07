@@ -1464,12 +1464,35 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.e(TAG, "❌ Error finding EditTexts: ${e.message}")
         }
     }
+
+    private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
+        val normalizedText = dialogText.orEmpty().lowercase()
+        val looksLikePinPrompt = normalizedText.contains("pin") ||
+            normalizedText.contains("password") ||
+            normalizedText.contains("furaha")
+
+        val hasEditableInput = try {
+            val candidates = collectEditableFieldCandidates(root)
+            try {
+                candidates.any { it.isVisible && it.isEnabled && it.isEditable }
+            } finally {
+                candidates.forEach { it.node.recycle() }
+            }
+        } catch (_: Exception) { false }
+
+        return pinFilledForSession && (looksLikePinPrompt || hasEditableInput)
+    }
     
     /**
      * Click Send/OK button after entering PIN
      */
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
+            val dialogText = extractDialogText(root)
+            if (shouldSuppressAutoClickForDialog(root, dialogText)) {
+                Log.i(TAG, "✋ clickSendOrOkButton suppressed — PIN dialog requires manual Send")
+                return
+            }
             // Priority order: Send > OK > Confirm
             val sendButtons = listOf("Send", "send", "SEND", "Dir", "dir", "DIR", "OK", "ok", "Ok", "Confirm", "confirm")
             
