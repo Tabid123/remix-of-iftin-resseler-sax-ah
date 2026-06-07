@@ -937,9 +937,23 @@ class UssdAccessibilityService : AccessibilityService() {
             return true
         }
 
+        // If the dialog is a numbered menu list (e.g. "1. Reseller  2. Transfer  ...
+        // 5. Change Password"), treat it as a menu — NOT a PIN prompt — even if it
+        // happens to mention "password" or "pin" as an option label.
+        if (looksLikeNumberedMenu(raw)) {
+            return false
+        }
+
         return lower.contains("pin") ||
             lower.contains("password") ||
             lower.contains("furaha")
+    }
+
+    private fun looksLikeNumberedMenu(text: String): Boolean {
+        if (text.isBlank()) return false
+        // Count occurrences of "1." / "2)" etc. — 2+ means it's a menu list.
+        val matches = Regex("(?m)(?:^|\\s)[1-9][.)]\\s+\\S").findAll(text).count()
+        return matches >= 2
     }
 
     private fun matchesPendingPinFlowStep(dialogText: String?): Boolean {
@@ -1245,9 +1259,14 @@ class UssdAccessibilityService : AccessibilityService() {
         } ?: return false
 
         val lower = dialogText.lowercase()
-        val looksLikePinDialog = lower.contains("pin") ||
-            lower.contains("password") ||
-            lower.contains("furaha")
+        // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
+        // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
+        val isMenuList = looksLikeNumberedMenu(dialogText)
+        val looksLikePinDialog = !isMenuList && (
+            lower.contains("pin") ||
+                lower.contains("password") ||
+                lower.contains("furaha")
+        )
         val step = flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
