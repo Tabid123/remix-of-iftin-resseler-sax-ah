@@ -920,7 +920,23 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun formatRect(rect: Rect): String = "[${rect.left},${rect.top},${rect.right},${rect.bottom}]"
 
     private fun isPinPromptText(dialogText: String?): Boolean {
-        val lower = dialogText.orEmpty().lowercase()
+        val raw = dialogText.orEmpty()
+        if (raw.isBlank()) return false
+
+        val lower = raw.lowercase()
+        val normalized = raw
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val exactPromptMatch = normalized.contains("fadlan geli pin-kaaga") ||
+            normalized.contains("enter pin")
+
+        if (exactPromptMatch) {
+            Log.i(TAG, "🔐 Exact PIN prompt detected — forcing hard stop for manual PIN entry")
+            return true
+        }
+
         return lower.contains("pin") ||
             lower.contains("password") ||
             lower.contains("furaha")
