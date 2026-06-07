@@ -1051,6 +1051,11 @@ class UssdAccessibilityService : AccessibilityService() {
             if (isPinDialog) {
                 Log.d(TAG, "🔐 PIN dialog detected (legacy path) pinSet=$pinSetCount submit=$submitCount")
                 Log.d(TAG, "📨 Carrier PIN prompt snapshot: ${dialogText?.take(200) ?: "<empty>"}")
+                scheduledSubmitRunnable?.let {
+                    handler.removeCallbacks(it)
+                    scheduledSubmitRunnable = null
+                    Log.i(TAG, "✋ Cancelled pending auto-submit because PIN dialog is now active")
+                }
 
                 val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString("current_pin_code", "") ?: "").trim()
@@ -1082,15 +1087,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // a carrier dialog can evade the simple text matcher above and the
             // generic Send/OK loop below would still press Send after we filled.
             val rootForGuard = rootInActiveWindow ?: source
-            val hasEditableInput = try {
-                val candidates = collectEditableFieldCandidates(rootForGuard)
-                try {
-                    candidates.any { it.isVisible && it.isEnabled && it.isEditable }
-                } finally {
-                    candidates.forEach { it.node.recycle() }
-                }
-            } catch (_: Exception) { false }
-            if (hasEditableInput && pinFilledForSession) {
+            if (shouldSuppressAutoClickForDialog(rootForGuard, dialogText)) {
                 Log.i(TAG, "✋ Generic confirm suppressed — PIN/input dialog awaiting manual Send")
                 showPinHud(
                     status = "FILLED — press Send",
