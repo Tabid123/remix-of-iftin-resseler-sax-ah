@@ -906,6 +906,59 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun formatRect(rect: Rect): String = "[${rect.left},${rect.top},${rect.right},${rect.bottom}]"
 
+    private fun isPinPromptText(dialogText: String?): Boolean {
+        val lower = dialogText.orEmpty().lowercase()
+        return lower.contains("pin") ||
+            lower.contains("password") ||
+            lower.contains("furaha")
+    }
+
+    private fun matchesPendingPinFlowStep(dialogText: String?): Boolean {
+        if (dialogText.isNullOrBlank()) return false
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val flowId = prefs.getString("current_ussd_flow_id", null)
+        val trigger = prefs.getString("current_trigger_code", null)
+        val flow = try {
+            UssdFlowsClient.findFlowById(flowId) ?: UssdFlowsClient.findFlowForTrigger(trigger)
+        } catch (e: Exception) {
+            Log.e(TAG, "PIN flow lookup error: ${e.message}")
+            null
+        } ?: return false
+
+        val lower = dialogText.lowercase()
+        val pendingStep = flow.steps.firstOrNull { step ->
+            step.order !in completedFlowSteps &&
+                step.keywords.isNotEmpty() &&
+                step.keywords.any { kw -> lower.contains(kw.lowercase()) }
+        }
+
+        return pendingStep?.isPinField == true
+    }
+
+    private fun shouldHardStopForPinStage(root: AccessibilityNodeInfo?, dialogText: String?): Boolean {
+        if (isPinPromptText(dialogText)) return true
+        val resolvedText = dialogText?.takeIf { it.isNotBlank() } ?: root?.let { extractDialogText(it) }
+        return matchesPendingPinFlowStep(resolvedText)
+    }
+
+    private fun engagePinHardStop(dialogText: String?) {
+        scheduledSubmitRunnable?.let {
+            handler.removeCallbacks(it)
+            scheduledSubmitRunnable = null
+        }
+        Log.i(TAG, "✋ PIN hard stop active — accessibility service will not type or click on this dialog")
+        showPinHud(
+            status = "MANUAL PIN",
+            expected = "",
+            actual = "",
+            method = "hard_stop",
+            extra = "pinHardStop=true autoInput=false autoClick=false userMustTypeAndSend=true"
+        )
+        if (!dialogText.isNullOrBlank()) {
+            Log.d(TAG, "🔐 Hard-stop PIN dialog snapshot: ${dialogText.take(200)}")
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         
@@ -983,6 +1036,23 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
+        val pinCheckRoot = rootInActiveWindow
+        val eventDialogText = event.text
+            ?.mapNotNull { it?.toString() }
+            ?.joinToString(" | ")
+            ?.takeIf { it.isNotBlank() }
+            ?: pinCheckRoot?.let { extractDialogText(it) }
+
+        if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
+            if (!eventDialogText.isNullOrBlank()) {
+                saveUssdResponse(eventDialogText)
+            }
+            engagePinHardStop(eventDialogText)
+            pinCheckRoot?.recycle()
+            return
+        }
+        pinCheckRoot?.recycle()
+
         // 2. SET_TEXT echo suppression window
         val now = System.currentTimeMillis()
         if (now < setTextSuppressUntilMs) {
@@ -1029,51 +1099,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 saveUssdResponse(dialogText)
             }
 
-            // ===== DYNAMIC USSD FLOW HANDLER =====
-            // Try to match the current dialog against admin-defined ussd_flow_steps.
-            // If a step matches, type the response_template and submit — overrides legacy logic.
-            if (!dialogText.isNullOrBlank() && tryHandleDynamicFlow(source, dialogText)) {
+            val hardStopRoot = rootInActiveWindow ?: source
+            if (shouldHardStopForPinStage(hardStopRoot, dialogText)) {
+                if (!dialogText.isNullOrBlank()) {
+                    saveUssdResponse(dialogText)
+                }
+                engagePinHardStop(dialogText)
+                if (hardStopRoot !== source) hardStopRoot.recycle()
                 source.recycle()
                 return
             }
 
-            // CHECK FOR PIN INPUT DIALOG - only enter PIN once per USSD session
-            val isPinDialog = dialogText?.contains("PIN", ignoreCase = true) == true ||
-                             dialogText?.contains("pin", ignoreCase = true) == true ||
-                             dialogText?.contains("password", ignoreCase = true) == true ||
-                             dialogText?.contains("furaha", ignoreCase = true) == true
-            
-            if (isPinDialog) {
-                Log.d(TAG, "🔐 PIN dialog detected (legacy path) pinSet=$pinSetCount submit=$submitCount")
-                Log.d(TAG, "📨 Carrier PIN prompt snapshot: ${dialogText?.take(200) ?: "<empty>"}")
-                scheduledSubmitRunnable?.let {
-                    handler.removeCallbacks(it)
-                    scheduledSubmitRunnable = null
-                    Log.i(TAG, "✋ Cancelled pending auto-submit because PIN dialog is now active")
-                }
-
-                val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    .getString("current_pin_code", "") ?: "").trim()
-
-                // Always use rootInActiveWindow for PIN — event.source can be a
-                // subtree that misses the EditText or the Send button.
-                val pinRoot = rootInActiveWindow ?: source
-
-                if (!pinFilledForSession) {
-                    if (!safeEnterPin(pinRoot, rawPin)) {
-                        Log.w(TAG, "⚠️ Legacy PIN entry skipped or failed (already filled or invalid)")
-                        if (pinRoot !== source) pinRoot.recycle()
-                        source.recycle()
-                        return
-                    }
-                } else {
-                    Log.d(TAG, "⏭️ PIN already filled for this session, skipping re-entry")
-                }
-
-                // Single submit guarantee — replaces inline postDelayed
-                submitPinOnce(delayMs = 600L, source = "legacy-pin-dialog")
-
-                if (pinRoot !== source) pinRoot.recycle()
+            // ===== DYNAMIC USSD FLOW HANDLER =====
+            // Try to match the current dialog against admin-defined ussd_flow_steps.
+            // If a step matches, type the response_template and submit — overrides legacy logic.
+            if (!dialogText.isNullOrBlank() && tryHandleDynamicFlow(source, dialogText)) {
                 source.recycle()
                 return
             }
@@ -1461,10 +1501,9 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
-        val normalizedText = dialogText.orEmpty().lowercase()
-        val looksLikePinPrompt = normalizedText.contains("pin") ||
-            normalizedText.contains("password") ||
-            normalizedText.contains("furaha")
+        if (shouldHardStopForPinStage(root, dialogText)) {
+            return true
+        }
 
         val hasEditableInput = try {
             val candidates = collectEditableFieldCandidates(root)
@@ -1475,7 +1514,7 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         } catch (_: Exception) { false }
 
-        return pinFilledForSession && (looksLikePinPrompt || hasEditableInput)
+        return pinFilledForSession && hasEditableInput
     }
     
     /**
@@ -1484,8 +1523,13 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
             val dialogText = extractDialogText(root)
+            if (shouldHardStopForPinStage(root, dialogText)) {
+                engagePinHardStop(dialogText)
+                Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
+                return
+            }
             if (shouldSuppressAutoClickForDialog(root, dialogText)) {
-                Log.i(TAG, "✋ clickSendOrOkButton suppressed — PIN dialog requires manual Send")
+                Log.i(TAG, "✋ clickSendOrOkButton suppressed — editable dialog awaiting manual action")
                 return
             }
             // Priority order: Send > OK > Confirm
