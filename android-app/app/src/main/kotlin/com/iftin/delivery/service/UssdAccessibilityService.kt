@@ -1259,9 +1259,14 @@ class UssdAccessibilityService : AccessibilityService() {
         } ?: return false
 
         val lower = dialogText.lowercase()
-        val looksLikePinDialog = lower.contains("pin") ||
-            lower.contains("password") ||
-            lower.contains("furaha")
+        // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
+        // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
+        val isMenuList = looksLikeNumberedMenu(dialogText)
+        val looksLikePinDialog = !isMenuList && (
+            lower.contains("pin") ||
+                lower.contains("password") ||
+                lower.contains("furaha")
+        )
         val step = flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
