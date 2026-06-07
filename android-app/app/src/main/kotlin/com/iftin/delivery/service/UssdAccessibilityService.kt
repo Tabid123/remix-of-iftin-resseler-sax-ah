@@ -188,6 +188,9 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var setTextSuppressUntilMs = 0L
     // Single scheduled submit Runnable — replaces all parallel postDelayed submits
     private var scheduledSubmitRunnable: Runnable? = null
+    // Delayed generic confirm runnable from onAccessibilityEvent.
+    // Must be cancellable when a PIN dialog appears.
+    private var pendingConfirmRunnable: Runnable? = null
     // Diagnostic counters per session
     @Volatile private var pinSetCount = 0
     @Volatile private var submitCount = 0
@@ -312,8 +315,7 @@ class UssdAccessibilityService : AccessibilityService() {
         lastPinWriteDiagnostics = null
         lastIntendedPinForSession = ""
         completedFlowSteps.clear()
-        scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
-        scheduledSubmitRunnable = null
+        cancelPendingAutoActions("session-reset:$reason")
         setTextSuppressUntilMs = 0L
         pinSetCount = 0
         submitCount = 0
@@ -322,6 +324,17 @@ class UssdAccessibilityService : AccessibilityService() {
         hudFirstReadLen = -1
         hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
+    }
+
+    private fun cancelPendingAutoActions(reason: String) {
+        pendingConfirmRunnable?.let { handler.removeCallbacks(it) }
+        pendingConfirmRunnable = null
+        scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
+        scheduledSubmitRunnable = null
+        multiDialogRunnable?.let { handler.removeCallbacks(it) }
+        multiDialogRunnable = null
+        isProcessingDialog = false
+        Log.d(TAG, "🛑 Cancelled pending auto-actions ($reason)")
     }
 
     /**
@@ -942,10 +955,7 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun engagePinHardStop(dialogText: String?) {
-        scheduledSubmitRunnable?.let {
-            handler.removeCallbacks(it)
-            scheduledSubmitRunnable = null
-        }
+        cancelPendingAutoActions("pin-hard-stop")
         Log.i(TAG, "✋ PIN hard stop active — accessibility service will not type or click on this dialog")
         showPinHud(
             status = "MANUAL PIN",
@@ -1044,6 +1054,7 @@ class UssdAccessibilityService : AccessibilityService() {
             ?: pinCheckRoot?.let { extractDialogText(it) }
 
         if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
+            cancelPendingAutoActions("onAccessibilityEvent-pin-top")
             if (!eventDialogText.isNullOrBlank()) {
                 saveUssdResponse(eventDialogText)
             }
@@ -1075,15 +1086,19 @@ class UssdAccessibilityService : AccessibilityService() {
 
         Log.d(TAG, "📱 STATE event from $packageName session=$ussdSessionToken pinSet=$pinSetCount submit=$submitCount")
 
-        handler.postDelayed({
+        pendingConfirmRunnable?.let { handler.removeCallbacks(it) }
+        val confirmRunnable = Runnable {
             try {
                 tryClickConfirmButton(event)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ tryClickConfirmButton crashed: ${e.message}")
             } finally {
+                pendingConfirmRunnable = null
                 isProcessingDialog = false
             }
-        }, CLICK_DELAY_MS)
+        }
+        pendingConfirmRunnable = confirmRunnable
+        handler.postDelayed(confirmRunnable, CLICK_DELAY_MS)
     }
 
     private fun tryClickConfirmButton(event: AccessibilityEvent) {
@@ -1651,7 +1666,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        multiDialogRunnable?.let { handler.removeCallbacks(it) }
+        cancelPendingAutoActions("service-destroy")
         hidePinHud()
         Log.d(TAG, "UssdAccessibilityService destroyed")
     }
