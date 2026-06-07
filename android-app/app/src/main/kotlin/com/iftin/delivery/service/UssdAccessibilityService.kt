@@ -402,29 +402,15 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
-            val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-            val isStkDialog = activePackage.contains("stk", ignoreCase = true) || activePackage.contains("toolkit", ignoreCase = true)
-            val preferredIsPassword = try { preferred.node.isPassword } catch (_: Exception) { preferred.isPassword }
-            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // Clipboard paste was removed: it triggered duplicate-character and empty-field
-            // races that produced "Invalid PIN format". ACTION_SET_TEXT only is now used.
-            if (preferredIsPassword || isStkDialog || isSamsungPhoneUi) {
-                methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
-                    focusEditableField(node, requireAccessibilityFocus = true)
-                    dispatchGestureKeypad(root, pin)
-                }
-            }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first methods=${methods.map { it.first }} (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi, stk=$isStkDialog, password=$preferredIsPassword)")
+            Log.d(TAG, "🧭 PIN path = ACTION_SET_TEXT only (EditText present, package=$activePackage)")
         } else {
-            // Pure dialpad screen — last-resort gesture taps on dialer digits
-            methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
-                focusEditableField(node, requireAccessibilityFocus = true)
-                dispatchGestureKeypad(root, pin)
-            }
-            Log.d(TAG, "🧭 PIN path = gesture-only (no EditText, package=$activePackage)")
+            pinWriteFailedForSession = true
+            Log.w(TAG, "⚠️ safeEnterPin — no real editable field available, refusing gesture/click fallback for PIN entry")
+            candidates.forEach { it.node.recycle() }
+            return false
         }
 
         var ok = false
@@ -592,16 +578,14 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun focusEditableField(node: AccessibilityNodeInfo, requireAccessibilityFocus: Boolean = false): Boolean {
         val focusResult = if (node.isFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val clickResult = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         val a11yResult = if (!requireAccessibilityFocus) node.isAccessibilityFocused else if (node.isAccessibilityFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        Log.d(TAG, "🎯 focusEditableField focus=$focusResult click=$clickResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus")
-        return focusResult || clickResult || a11yResult
+        Log.d(TAG, "🎯 focusEditableField focus=$focusResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus click=disabled")
+        return focusResult || a11yResult
     }
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
-        // Explicit prepare: ACTION_CLICK + ACTION_FOCUS on the input node so the
-        // dialog treats this EditText as the active target before we write.
-        try { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) {}
+        // ACTION_CLICK is intentionally forbidden for PIN entry. Only focus +
+        // ACTION_SET_TEXT are allowed so the user manually presses Send.
         try { if (!node.isFocused) node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) } catch (_: Exception) {}
         focusEditableField(node)
         // Trim any hidden whitespace/newlines from the PIN before insertion.
