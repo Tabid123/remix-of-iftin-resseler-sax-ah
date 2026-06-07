@@ -1666,7 +1666,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        multiDialogRunnable?.let { handler.removeCallbacks(it) }
+        cancelPendingAutoActions("service-destroy")
         hidePinHud()
         Log.d(TAG, "UssdAccessibilityService destroyed")
     }
