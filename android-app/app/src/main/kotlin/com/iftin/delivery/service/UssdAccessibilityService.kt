@@ -402,49 +402,30 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
-            val isSamsungPhoneUi = activePackage.contains("samsung", ignoreCase = true) || Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-            val isStkDialog = activePackage.contains("stk", ignoreCase = true) || activePackage.contains("toolkit", ignoreCase = true)
-            val preferredIsPassword = try { preferred.node.isPassword } catch (_: Exception) { preferred.isPassword }
-            // EDITABLE-FIRST PATH (Somtel/Jeeb dialog with EditText + Send).
-            // Clipboard paste was removed: it triggered duplicate-character and empty-field
-            // races that produced "Invalid PIN format". ACTION_SET_TEXT only is now used.
-            if (preferredIsPassword || isStkDialog || isSamsungPhoneUi) {
-                methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
-                    focusEditableField(node, requireAccessibilityFocus = true)
-                    dispatchGestureKeypad(root, pin)
-                }
-            }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = editable-first methods=${methods.map { it.first }} (EditText present, package=$activePackage, samsung=$isSamsungPhoneUi, stk=$isStkDialog, password=$preferredIsPassword)")
+            Log.d(TAG, "🧭 PIN path = ACTION_SET_TEXT only (EditText present, package=$activePackage)")
         } else {
-            // Pure dialpad screen — last-resort gesture taps on dialer digits
-            methods += "gesture_keypad" to { node: AccessibilityNodeInfo, pin: String ->
-                focusEditableField(node, requireAccessibilityFocus = true)
-                dispatchGestureKeypad(root, pin)
-            }
-            Log.d(TAG, "🧭 PIN path = gesture-only (no EditText, package=$activePackage)")
+            pinWriteFailedForSession = true
+            Log.w(TAG, "⚠️ safeEnterPin — no real editable field available, refusing gesture/click fallback for PIN entry")
+            candidates.forEach { it.node.recycle() }
+            return false
         }
 
         var ok = false
         try {
             for ((methodName, writer) in methods) {
-                if (methodName == "gesture_keypad") {
-                    if (preferred.existingTextLength > 0) {
-                        Log.w(TAG, "⚠️ Gesture PIN path found prefilled text len=${preferred.existingTextLength}; skipping ACTION_SET_TEXT clear to avoid tainting STK input")
-                    }
-                } else {
-                    // Only clear when the field actually holds stale content that
-                    // would prepend/append to our PIN. Blind clearing on Samsung
-                    // password EditText can leave the field in an empty-but-dirty
-                    // state that the carrier rejects.
+                if (methodName == "action_set_text") {
                     val existing = preferred.node.text?.toString().orEmpty()
                     if (existing.isNotEmpty() && existing != cleanPin) {
                         clearEditableField(preferred.node)
                     } else {
                         focusEditableField(preferred.node, requireAccessibilityFocus = true)
                     }
+                } else {
+                    Log.w(TAG, "⚠️ Unexpected PIN writer '$methodName' skipped; ACTION_SET_TEXT is the only allowed path")
+                    continue
                 }
                 val wrote = writer(preferred.node, cleanPin)
                 val verification = verifyPinFieldValue(
@@ -592,16 +573,14 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun focusEditableField(node: AccessibilityNodeInfo, requireAccessibilityFocus: Boolean = false): Boolean {
         val focusResult = if (node.isFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val clickResult = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         val a11yResult = if (!requireAccessibilityFocus) node.isAccessibilityFocused else if (node.isAccessibilityFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        Log.d(TAG, "🎯 focusEditableField focus=$focusResult click=$clickResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus")
-        return focusResult || clickResult || a11yResult
+        Log.d(TAG, "🎯 focusEditableField focus=$focusResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus click=disabled")
+        return focusResult || a11yResult
     }
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
-        // Explicit prepare: ACTION_CLICK + ACTION_FOCUS on the input node so the
-        // dialog treats this EditText as the active target before we write.
-        try { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) {}
+        // ACTION_CLICK is intentionally forbidden for PIN entry. Only focus +
+        // ACTION_SET_TEXT are allowed so the user manually presses Send.
         try { if (!node.isFocused) node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) } catch (_: Exception) {}
         focusEditableField(node)
         // Trim any hidden whitespace/newlines from the PIN before insertion.
@@ -1067,6 +1046,11 @@ class UssdAccessibilityService : AccessibilityService() {
             if (isPinDialog) {
                 Log.d(TAG, "🔐 PIN dialog detected (legacy path) pinSet=$pinSetCount submit=$submitCount")
                 Log.d(TAG, "📨 Carrier PIN prompt snapshot: ${dialogText?.take(200) ?: "<empty>"}")
+                scheduledSubmitRunnable?.let {
+                    handler.removeCallbacks(it)
+                    scheduledSubmitRunnable = null
+                    Log.i(TAG, "✋ Cancelled pending auto-submit because PIN dialog is now active")
+                }
 
                 val rawPin = (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString("current_pin_code", "") ?: "").trim()
@@ -1098,15 +1082,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // a carrier dialog can evade the simple text matcher above and the
             // generic Send/OK loop below would still press Send after we filled.
             val rootForGuard = rootInActiveWindow ?: source
-            val hasEditableInput = try {
-                val candidates = collectEditableFieldCandidates(rootForGuard)
-                try {
-                    candidates.any { it.isVisible && it.isEnabled && it.isEditable }
-                } finally {
-                    candidates.forEach { it.node.recycle() }
-                }
-            } catch (_: Exception) { false }
-            if (hasEditableInput && pinFilledForSession) {
+            if (shouldSuppressAutoClickForDialog(rootForGuard, dialogText)) {
                 Log.i(TAG, "✋ Generic confirm suppressed — PIN/input dialog awaiting manual Send")
                 showPinHud(
                     status = "FILLED — press Send",
@@ -1483,12 +1459,35 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.e(TAG, "❌ Error finding EditTexts: ${e.message}")
         }
     }
+
+    private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
+        val normalizedText = dialogText.orEmpty().lowercase()
+        val looksLikePinPrompt = normalizedText.contains("pin") ||
+            normalizedText.contains("password") ||
+            normalizedText.contains("furaha")
+
+        val hasEditableInput = try {
+            val candidates = collectEditableFieldCandidates(root)
+            try {
+                candidates.any { it.isVisible && it.isEnabled && it.isEditable }
+            } finally {
+                candidates.forEach { it.node.recycle() }
+            }
+        } catch (_: Exception) { false }
+
+        return pinFilledForSession && (looksLikePinPrompt || hasEditableInput)
+    }
     
     /**
      * Click Send/OK button after entering PIN
      */
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
+            val dialogText = extractDialogText(root)
+            if (shouldSuppressAutoClickForDialog(root, dialogText)) {
+                Log.i(TAG, "✋ clickSendOrOkButton suppressed — PIN dialog requires manual Send")
+                return
+            }
             // Priority order: Send > OK > Confirm
             val sendButtons = listOf("Send", "send", "SEND", "Dir", "dir", "DIR", "OK", "ok", "Ok", "Confirm", "confirm")
             
