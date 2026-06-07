@@ -416,21 +416,16 @@ class UssdAccessibilityService : AccessibilityService() {
         var ok = false
         try {
             for ((methodName, writer) in methods) {
-                if (methodName == "gesture_keypad") {
-                    if (preferred.existingTextLength > 0) {
-                        Log.w(TAG, "⚠️ Gesture PIN path found prefilled text len=${preferred.existingTextLength}; skipping ACTION_SET_TEXT clear to avoid tainting STK input")
-                    }
-                } else {
-                    // Only clear when the field actually holds stale content that
-                    // would prepend/append to our PIN. Blind clearing on Samsung
-                    // password EditText can leave the field in an empty-but-dirty
-                    // state that the carrier rejects.
+                if (methodName == "action_set_text") {
                     val existing = preferred.node.text?.toString().orEmpty()
                     if (existing.isNotEmpty() && existing != cleanPin) {
                         clearEditableField(preferred.node)
                     } else {
                         focusEditableField(preferred.node, requireAccessibilityFocus = true)
                     }
+                } else {
+                    Log.w(TAG, "⚠️ Unexpected PIN writer '$methodName' skipped; ACTION_SET_TEXT is the only allowed path")
+                    continue
                 }
                 val wrote = writer(preferred.node, cleanPin)
                 val verification = verifyPinFieldValue(
