@@ -188,6 +188,9 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var setTextSuppressUntilMs = 0L
     // Single scheduled submit Runnable — replaces all parallel postDelayed submits
     private var scheduledSubmitRunnable: Runnable? = null
+    // Delayed generic confirm runnable from onAccessibilityEvent.
+    // Must be cancellable when a PIN dialog appears.
+    private var pendingConfirmRunnable: Runnable? = null
     // Diagnostic counters per session
     @Volatile private var pinSetCount = 0
     @Volatile private var submitCount = 0
@@ -312,8 +315,7 @@ class UssdAccessibilityService : AccessibilityService() {
         lastPinWriteDiagnostics = null
         lastIntendedPinForSession = ""
         completedFlowSteps.clear()
-        scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
-        scheduledSubmitRunnable = null
+        cancelPendingAutoActions("session-reset:$reason")
         setTextSuppressUntilMs = 0L
         pinSetCount = 0
         submitCount = 0
@@ -322,6 +324,17 @@ class UssdAccessibilityService : AccessibilityService() {
         hudFirstReadLen = -1
         hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
+    }
+
+    private fun cancelPendingAutoActions(reason: String) {
+        pendingConfirmRunnable?.let { handler.removeCallbacks(it) }
+        pendingConfirmRunnable = null
+        scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
+        scheduledSubmitRunnable = null
+        multiDialogRunnable?.let { handler.removeCallbacks(it) }
+        multiDialogRunnable = null
+        isProcessingDialog = false
+        Log.d(TAG, "🛑 Cancelled pending auto-actions ($reason)")
     }
 
     /**
