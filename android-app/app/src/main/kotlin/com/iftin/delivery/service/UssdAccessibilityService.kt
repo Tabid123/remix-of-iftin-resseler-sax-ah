@@ -1133,7 +1133,15 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun tryClickConfirmButton(event: AccessibilityEvent) {
         try {
-            val source = event.source ?: rootInActiveWindow ?: return
+            // IMPORTANT: prefer rootInActiveWindow because this runs inside a
+            // postDelayed runnable — by the time we execute, the original
+            // AccessibilityEvent has usually been recycled by the framework
+            // and event.source returns an unsealed/recycled node which throws
+            // "Cannot perform this action on a not sealed instance".
+            val source = rootInActiveWindow ?: try { event.source } catch (_: Exception) { null } ?: return
+            if (!source.refresh()) {
+                Log.d(TAG, "⚠️ source.refresh() returned false — node may be stale")
+            }
             
             // CAPTURE ALL DIALOG TEXT FIRST - before any filtering
             val dialogText = extractDialogText(source)
