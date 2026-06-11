@@ -1299,7 +1299,11 @@ class UssdAccessibilityService : AccessibilityService() {
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
-        } ?: return false
+        }
+        if (step == null) {
+            Log.d(TAG, "ℹ️ Flow ${flow.triggerCode}: no step matched. completed=$completedFlowSteps dialog=${dialogText.take(120)}")
+            return false
+        }
 
         if (looksLikePinDialog && !step.isPinField) {
             Log.w(TAG, "⚠️ Dynamic flow step #${step.order} matched on PIN dialog but isPinField=false; deferring to PIN handler")
