@@ -101,5 +101,11 @@ object UssdFlowsClient {
         return byId[id]
     }
 
+    /** Returns all enabled flows (loads if needed). Used for fallback content matching. */
+    fun allFlows(): Collection<Flow> {
+        loadFlows()
+        return byTrigger.values
+    }
+
     private fun normalizeTrigger(t: String): String = t.trim().lowercase()
 }
