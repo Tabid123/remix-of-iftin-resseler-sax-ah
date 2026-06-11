@@ -1086,6 +1086,11 @@ class UssdAccessibilityService : AccessibilityService() {
             ?.joinToString(" | ")
             ?.takeIf { it.isNotBlank() }
             ?: pinCheckRoot?.let { extractDialogText(it) }
+        val dialogFingerprint = eventDialogText
+            ?.lowercase()
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(220)
+            .orEmpty()
 
         if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
             cancelPendingAutoActions("onAccessibilityEvent-pin-top")
@@ -1105,9 +1110,12 @@ class UssdAccessibilityService : AccessibilityService() {
         val now = System.currentTimeMillis()
 
         // 3. Debounce
-        if (now - lastClickTime < DEBOUNCE_MS) {
+        if (now - lastClickTime < DEBOUNCE_MS && dialogFingerprint.isNotBlank() && dialogFingerprint == lastDialogFingerprint) {
             Log.d(TAG, "⏳ Debounce: ignoring event (${now - lastClickTime}ms since last click)")
             return
+        }
+        if (dialogFingerprint.isNotBlank()) {
+            lastDialogFingerprint = dialogFingerprint
         }
 
         // 4. Single in-flight processing lock
