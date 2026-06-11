@@ -983,10 +983,42 @@ class UssdAccessibilityService : AccessibilityService() {
         return pendingStep?.isPinField == true
     }
 
+    private fun hasStoredPinForAutoEntry(): Boolean {
+        val pin = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("current_pin_code", "")
+            .orEmpty()
+            .trim()
+        return pin.length == 4 && pin.all { it.isDigit() }
+    }
+
+    private fun matchesConfiguredPinFlowStep(dialogText: String?): Boolean {
+        if (dialogText.isNullOrBlank()) return false
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val flowId = prefs.getString("current_ussd_flow_id", null)
+        val trigger = prefs.getString("current_trigger_code", null)
+        val flow = try {
+            UssdFlowsClient.findFlowById(flowId) ?: UssdFlowsClient.findFlowForTrigger(trigger)
+        } catch (e: Exception) {
+            Log.e(TAG, "Configured PIN flow lookup error: ${e.message}")
+            null
+        } ?: return false
+
+        val lower = dialogText.lowercase()
+        return flow.steps.any { step ->
+            step.isPinField &&
+                step.keywords.isNotEmpty() &&
+                step.keywords.any { kw -> lower.contains(kw.lowercase()) }
+        }
+    }
+
     private fun shouldHardStopForPinStage(root: AccessibilityNodeInfo?, dialogText: String?): Boolean {
-        if (isPinPromptText(dialogText)) return true
         val resolvedText = dialogText?.takeIf { it.isNotBlank() } ?: root?.let { extractDialogText(it) }
         if (looksLikeNumberedMenu(resolvedText.orEmpty())) return false
+        if (matchesConfiguredPinFlowStep(resolvedText) && hasStoredPinForAutoEntry()) {
+            Log.i(TAG, "🔓 Configured PIN flow detected — skipping hard stop so auto PIN can run")
+            return false
+        }
+        if (isPinPromptText(resolvedText)) return true
         return matchesPendingPinFlowStep(resolvedText)
     }
 
@@ -1681,7 +1713,7 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
             val dialogText = extractDialogText(root)
-            if (shouldHardStopForPinStage(root, dialogText)) {
+            if (shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 engagePinHardStop(dialogText)
                 Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
                 return
