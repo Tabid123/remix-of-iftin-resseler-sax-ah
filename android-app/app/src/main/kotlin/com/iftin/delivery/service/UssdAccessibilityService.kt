@@ -1519,13 +1519,15 @@ class UssdAccessibilityService : AccessibilityService() {
         return true
     }
 
-    /** Format amount string for USSD: "11.60" -> "11*60", "20" -> "20", "0.10" -> "010" */
+    /** Format amount string for USSD: "11.60" -> "11*60", "20" -> "20", "0.10" -> "0*10" */
     private fun formatAmountForUssd(raw: String): String {
         if (raw.isBlank()) return ""
         val n = raw.toDoubleOrNull() ?: return raw
         if (n == n.toLong().toDouble()) return n.toLong().toString()
         val f = String.format("%.2f", n)
-        return if (n < 1) f.replace(".", "") else f.replace(".", "*")
+        // Always use '*' as decimal separator so carriers don't misread leading-zero
+        // amounts like 0.12 as $12. e.g. 0.12 -> "0*12", 11.60 -> "11*60"
+        return f.replace(".", "*")
     }
     
     /**
