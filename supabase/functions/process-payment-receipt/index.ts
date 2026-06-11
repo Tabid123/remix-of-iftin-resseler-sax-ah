@@ -758,9 +758,33 @@ serve(async (req) => {
             if (f) flowRow = { trigger_code: f.trigger_code, is_enabled: !!f.is_enabled };
           }
 
-          // cost_price = lacagta lasoo diray (smsAmount) × (1 + evoucher_rate ee shirkadda)
-          const evoucherRate = await getProviderRate(supabase, pendingOnline.provider_id);
-          const topupAmount = Number((Number(smsAmount) * (1 + evoucherRate)).toFixed(2));
+          // topup_amount = smsAmount × (1 + tier.profit_rate/100)
+          // Use the wholesale tier's profit_rate (percent) for THIS provider.
+          let tierProfitRate = 0;
+          if (pendingOnline.tier_id) {
+            const { data: tierRow } = await supabase
+              .from('provider_wholesale_tiers')
+              .select('profit_rate')
+              .eq('id', pendingOnline.tier_id)
+              .maybeSingle();
+            tierProfitRate = Number(tierRow?.profit_rate || 0);
+          }
+          // Fallback: match by provider + amount range
+          if (!tierProfitRate) {
+            const { data: tierMatch } = await supabase
+              .from('provider_wholesale_tiers')
+              .select('profit_rate')
+              .eq('provider_id', pendingOnline.provider_id)
+              .eq('is_active', true)
+              .lte('min_amount', smsAmount)
+              .gte('max_amount', smsAmount)
+              .order('min_amount', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            tierProfitRate = Number(tierMatch?.profit_rate || 0);
+          }
+          const topupAmount = Number((Number(smsAmount) * (1 + tierProfitRate / 100)).toFixed(2));
+          console.log('🧮 Jumlo tier rate:', { tier_id: pendingOnline.tier_id, tierProfitRate, smsAmount, topupAmount });
 
           // Fetch sim_password from delivery_instructions for this provider (provider default)
           let jumloPin = '5516';
@@ -781,7 +805,7 @@ serve(async (req) => {
             pendingOnline.receiver_phone,
             jumloPin,
           );
-          console.log('🧮 Jumlo computed:', { smsAmount, evoucherRate, topupAmount, jumloPin, ussd: dispatch.ussd_code });
+          console.log('🧮 Jumlo computed:', { smsAmount, tierProfitRate, topupAmount, jumloPin, ussd: dispatch.ussd_code });
           const normalizeProviderSlug = (name: string) => {
             const lower = (name || '').toLowerCase();
             if (lower.includes('hormuud')) return 'hormuud';
