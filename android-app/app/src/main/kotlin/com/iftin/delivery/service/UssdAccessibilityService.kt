@@ -164,6 +164,7 @@ class UssdAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var clickCount = 0
     private var lastClickTime = 0L
+    private var lastDialogFingerprint = ""
     private var multiDialogRunnable: Runnable? = null
 
     // Session guards to prevent duplicate PIN entry
@@ -321,6 +322,7 @@ class UssdAccessibilityService : AccessibilityService() {
         submitCount = 0
         ignoredEventCount = 0
         isProcessingDialog = false
+        lastDialogFingerprint = ""
         hudFirstReadLen = -1
         hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
