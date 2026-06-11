@@ -987,6 +987,16 @@ class UssdAccessibilityService : AccessibilityService() {
         return matchesPendingPinFlowStep(resolvedText)
     }
 
+    private fun shouldBypassPinHardStop(dialogText: String?): Boolean {
+        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) return false
+        val normalized = dialogText.orEmpty().lowercase()
+        return normalized.isBlank() ||
+            normalized.contains("pin") ||
+            normalized.contains("password") ||
+            normalized.contains("furaha") ||
+            lastIntendedPinForSession.isNotBlank()
+    }
+
     private fun engagePinHardStop(dialogText: String?) {
         cancelPendingAutoActions("pin-hard-stop")
         Log.i(TAG, "✋ PIN hard stop active — accessibility service will not type or click on this dialog")
@@ -1096,7 +1106,7 @@ class UssdAccessibilityService : AccessibilityService() {
             ?.take(220)
             .orEmpty()
 
-        if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
+        if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText) && !shouldBypassPinHardStop(eventDialogText)) {
             cancelPendingAutoActions("onAccessibilityEvent-pin-top")
             if (!eventDialogText.isNullOrBlank()) {
                 saveUssdResponse(eventDialogText)
@@ -1170,7 +1180,7 @@ class UssdAccessibilityService : AccessibilityService() {
             }
 
             val hardStopRoot = rootInActiveWindow ?: source
-            if (shouldHardStopForPinStage(hardStopRoot, dialogText)) {
+            if (shouldHardStopForPinStage(hardStopRoot, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 if (!dialogText.isNullOrBlank()) {
                     saveUssdResponse(dialogText)
                 }
