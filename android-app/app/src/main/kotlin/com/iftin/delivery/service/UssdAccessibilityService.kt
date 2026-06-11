@@ -1563,16 +1563,37 @@ class UssdAccessibilityService : AccessibilityService() {
             return true
         }
 
-        val hasEditableInput = try {
+        // Inspect editable inputs: if dialog has a visible editable field, we must
+        // NOT click Send/OK unless something has actually been typed. Otherwise the
+        // carrier responds with "Input required. Try again." (seen on Hormuud
+        // numbered menus like 1.Reseller / 2.Transfer where the dynamic flow step
+        // didn't match and the generic Send loop fired blindly).
+        val inputState = try {
             val candidates = collectEditableFieldCandidates(root)
             try {
-                candidates.any { it.isVisible && it.isEnabled && it.isEditable }
+                val visibleEditables = candidates.filter { it.isVisible && it.isEnabled && it.isEditable }
+                val hasAny = visibleEditables.isNotEmpty()
+                val hasEmpty = visibleEditables.any { it.existingTextLength == 0 }
+                Pair(hasAny, hasEmpty)
             } finally {
                 candidates.forEach { it.node.recycle() }
             }
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { Pair(false, false) }
 
-        return pinFilledForSession && hasEditableInput
+        val hasEditableInput = inputState.first
+        val hasEmptyEditableInput = inputState.second
+
+        // 1. After we filled the PIN once, never let the generic loop press Send.
+        if (pinFilledForSession && hasEditableInput) return true
+
+        // 2. If the dialog still has an empty input box, refuse to click Send/OK —
+        //    something must be typed first (either by a dynamic flow step or the user).
+        if (hasEmptyEditableInput) {
+            Log.i(TAG, "🛑 Suppressing auto-click — dialog has empty input field (would trigger 'Input required')")
+            return true
+        }
+
+        return false
     }
     
     /**
