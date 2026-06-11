@@ -1662,8 +1662,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasEditableInput = inputState.first
         val hasEmptyEditableInput = inputState.second
 
-        // 1. After we filled the PIN once, never let the generic loop press Send.
-        if (pinFilledForSession && hasEditableInput) return true
+        // 1. Before verified PIN auto-submit starts, keep the generic loop away from Send.
+        if (pinFilledForSession && hasEditableInput && !pinSubmittedForSession) return true
 
         // 2. If the dialog still has an empty input box, refuse to click Send/OK —
         //    something must be typed first (either by a dynamic flow step or the user).
