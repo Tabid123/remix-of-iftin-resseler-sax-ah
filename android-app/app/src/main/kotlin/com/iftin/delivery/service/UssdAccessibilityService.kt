@@ -348,26 +348,29 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
-        // ===== HARD STOP: NEVER AUTO-SEND PIN =====
-        // A previously persisted auto_send_pin=true on the device can still make
-        // old builds auto-click Send. To fully eliminate the carrier-side race
-        // that causes "Invalid PIN format", PIN screens are now ALWAYS fill-only.
-        pinSubmittedForSession = true
-        val diagInfo = lastPinWriteDiagnostics
-        Log.i(
-            TAG,
-            "✋ submitPinOnce[$source] suppressed — PIN auto-send is permanently disabled. " +
-                "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
-        )
-        showPinHud(
-            status = "FILLED — press Send",
-            expected = lastIntendedPinForSession,
-            actual = "",
-            method = diagInfo?.method ?: "none",
-            extra = "autoSend=false hardStop=true awaitingUserConfirm=true"
-        )
+        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) {
+            Log.w(TAG, "✋ submitPinOnce[$source] blocked — PIN not safely verified yet")
+            return
+        }
         scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
-        scheduledSubmitRunnable = null
+        val r = Runnable {
+            val rt = rootInActiveWindow ?: return@Runnable
+            try {
+                if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) {
+                    Log.w(TAG, "✋ submitPinOnce[$source] aborted at runtime — PIN verification lost")
+                    return@Runnable
+                }
+                pinSubmittedForSession = true
+                submitCount++
+                Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
+                clickSendOrOkButton(rt)
+            } finally {
+                rt.recycle()
+                scheduledSubmitRunnable = null
+            }
+        }
+        scheduledSubmitRunnable = r
+        handler.postDelayed(r, delayMs)
     }
 
     /**
@@ -987,6 +990,16 @@ class UssdAccessibilityService : AccessibilityService() {
         return matchesPendingPinFlowStep(resolvedText)
     }
 
+    private fun shouldBypassPinHardStop(dialogText: String?): Boolean {
+        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) return false
+        val normalized = dialogText.orEmpty().lowercase()
+        return normalized.isBlank() ||
+            normalized.contains("pin") ||
+            normalized.contains("password") ||
+            normalized.contains("furaha") ||
+            lastIntendedPinForSession.isNotBlank()
+    }
+
     private fun engagePinHardStop(dialogText: String?) {
         cancelPendingAutoActions("pin-hard-stop")
         Log.i(TAG, "✋ PIN hard stop active — accessibility service will not type or click on this dialog")
@@ -1096,7 +1109,7 @@ class UssdAccessibilityService : AccessibilityService() {
             ?.take(220)
             .orEmpty()
 
-        if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
+        if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText) && !shouldBypassPinHardStop(eventDialogText)) {
             cancelPendingAutoActions("onAccessibilityEvent-pin-top")
             if (!eventDialogText.isNullOrBlank()) {
                 saveUssdResponse(eventDialogText)
@@ -1170,7 +1183,7 @@ class UssdAccessibilityService : AccessibilityService() {
             }
 
             val hardStopRoot = rootInActiveWindow ?: source
-            if (shouldHardStopForPinStage(hardStopRoot, dialogText)) {
+            if (shouldHardStopForPinStage(hardStopRoot, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 if (!dialogText.isNullOrBlank()) {
                     saveUssdResponse(dialogText)
                 }
@@ -1649,8 +1662,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasEditableInput = inputState.first
         val hasEmptyEditableInput = inputState.second
 
-        // 1. After we filled the PIN once, never let the generic loop press Send.
-        if (pinFilledForSession && hasEditableInput) return true
+        // 1. Before verified PIN auto-submit starts, keep the generic loop away from Send.
+        if (pinFilledForSession && hasEditableInput && !pinSubmittedForSession) return true
 
         // 2. If the dialog still has an empty input box, refuse to click Send/OK —
         //    something must be typed first (either by a dynamic flow step or the user).
