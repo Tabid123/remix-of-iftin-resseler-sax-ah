@@ -1260,11 +1260,31 @@ class UssdAccessibilityService : AccessibilityService() {
         // fall back to trigger-code lookup for backward compatibility.
         val flowId = prefs.getString("current_ussd_flow_id", null)
         val trigger = prefs.getString("current_trigger_code", null)
-        val flow = try {
+        var flow = try {
             UssdFlowsClient.findFlowById(flowId) ?: UssdFlowsClient.findFlowForTrigger(trigger)
         } catch (e: Exception) {
             Log.e(TAG, "Flow lookup error: ${e.message}"); null
-        } ?: return false
+        }
+
+        // Fallback: no flow context (e.g. manual *300# dial or order missing flow_id).
+        // Scan all enabled flows and pick the first whose any step keyword matches the dialog.
+        if (flow == null) {
+            val lowerForScan = dialogText.lowercase()
+            flow = try {
+                UssdFlowsClient.allFlows().firstOrNull { f ->
+                    f.steps.any { s ->
+                        s.keywords.any { kw -> kw.isNotBlank() && lowerForScan.contains(kw.lowercase()) }
+                    }
+                }
+            } catch (_: Exception) { null }
+            if (flow != null) {
+                Log.i(TAG, "🔎 Flow context missing — fallback matched flow ${flow.triggerCode} by dialog content")
+            }
+        }
+        if (flow == null) {
+            Log.d(TAG, "ℹ️ No matching USSD flow (flowId=$flowId trigger=$trigger). Dialog: ${dialogText.take(120)}")
+            return false
+        }
 
         val lower = dialogText.lowercase()
         // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
@@ -1279,7 +1299,11 @@ class UssdAccessibilityService : AccessibilityService() {
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
-        } ?: return false
+        }
+        if (step == null) {
+            Log.d(TAG, "ℹ️ Flow ${flow.triggerCode}: no step matched. completed=$completedFlowSteps dialog=${dialogText.take(120)}")
+            return false
+        }
 
         if (looksLikePinDialog && !step.isPinField) {
             Log.w(TAG, "⚠️ Dynamic flow step #${step.order} matched on PIN dialog but isPinField=false; deferring to PIN handler")
