@@ -1096,12 +1096,11 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         pinCheckRoot?.recycle()
 
-        // 2. SET_TEXT echo suppression window
+        // 2. SET_TEXT suppression is only meant for ACTION_SET_TEXT echo events.
+        // Real carrier navigation to the next USSD page can also arrive immediately
+        // after we type+send a menu value. If we suppress STATE_CHANGED here, we miss
+        // the next prompt entirely (e.g. step 2 asking for receiver number).
         val now = System.currentTimeMillis()
-        if (now < setTextSuppressUntilMs) {
-            Log.d(TAG, "🤫 SET_TEXT suppression active (${setTextSuppressUntilMs - now}ms left) — ignoring event")
-            return
-        }
 
         // 3. Debounce
         if (now - lastClickTime < DEBOUNCE_MS) {
@@ -1413,7 +1412,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
 
-        // Suppress the CONTENT_CHANGED echo from this SET_TEXT
+        // Keep a short marker for potential SET_TEXT echo events only.
+        // onAccessibilityEvent no longer suppresses TYPE_WINDOW_STATE_CHANGED using this,
+        // so the next USSD screen can still be processed immediately.
         setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
         completedFlowSteps.add(step.order)
 
