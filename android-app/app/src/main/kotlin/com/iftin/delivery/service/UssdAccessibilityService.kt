@@ -1519,15 +1519,15 @@ class UssdAccessibilityService : AccessibilityService() {
         return true
     }
 
-    /** Format amount string for USSD: "11.60" -> "11*60", "20" -> "20", "0.10" -> "0*10" */
+    /** Format amount typed into a USSD dialog EditText: keep decimal as-is.
+     *  "20" -> "20", "11.60" -> "11.60", "0.12" -> "0.12" */
     private fun formatAmountForUssd(raw: String): String {
         if (raw.isBlank()) return ""
         val n = raw.toDoubleOrNull() ?: return raw
         if (n == n.toLong().toDouble()) return n.toLong().toString()
-        val f = String.format("%.2f", n)
-        // Always use '*' as decimal separator so carriers don't misread leading-zero
-        // amounts like 0.12 as $12. e.g. 0.12 -> "0*12", 11.60 -> "11*60"
-        return f.replace(".", "*")
+        // EditText prompts expect a normal decimal number — NOT the asterisk
+        // USSD-code form. e.g. "0.12" stays "0.12" so Somtel reads $0.12 (not $12).
+        return String.format("%.2f", n)
     }
     
     /**
