@@ -348,26 +348,29 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d(TAG, "🛑 submitPinOnce[$source] ignored — already submitted (submitCount=$submitCount)")
             return
         }
-        // ===== HARD STOP: NEVER AUTO-SEND PIN =====
-        // A previously persisted auto_send_pin=true on the device can still make
-        // old builds auto-click Send. To fully eliminate the carrier-side race
-        // that causes "Invalid PIN format", PIN screens are now ALWAYS fill-only.
-        pinSubmittedForSession = true
-        val diagInfo = lastPinWriteDiagnostics
-        Log.i(
-            TAG,
-            "✋ submitPinOnce[$source] suppressed — PIN auto-send is permanently disabled. " +
-                "PIN filled (method=${diagInfo?.method ?: "none"}), waiting for user to press Send."
-        )
-        showPinHud(
-            status = "FILLED — press Send",
-            expected = lastIntendedPinForSession,
-            actual = "",
-            method = diagInfo?.method ?: "none",
-            extra = "autoSend=false hardStop=true awaitingUserConfirm=true"
-        )
+        if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) {
+            Log.w(TAG, "✋ submitPinOnce[$source] blocked — PIN not safely verified yet")
+            return
+        }
         scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
-        scheduledSubmitRunnable = null
+        val r = Runnable {
+            val rt = rootInActiveWindow ?: return@Runnable
+            try {
+                if (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession) {
+                    Log.w(TAG, "✋ submitPinOnce[$source] aborted at runtime — PIN verification lost")
+                    return@Runnable
+                }
+                pinSubmittedForSession = true
+                submitCount++
+                Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
+                clickSendOrOkButton(rt)
+            } finally {
+                rt.recycle()
+                scheduledSubmitRunnable = null
+            }
+        }
+        scheduledSubmitRunnable = r
+        handler.postDelayed(r, delayMs)
     }
 
     /**
