@@ -1474,6 +1474,26 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 if (et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
                     typed = true
+                    // Verify the dot wasn't stripped by a numeric input filter
+                    // (some carrier dialers use inputType=number which removes '.').
+                    // If stripped, fall back to clipboard PASTE which bypasses filters.
+                    if (response.contains('.')) {
+                        val current = et.text?.toString() ?: ""
+                        if (!current.contains('.')) {
+                            Log.w(TAG, "⚠️ Dot stripped from '$response' (got '$current') — retrying via clipboard PASTE")
+                            try {
+                                val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("ussd_amount", response))
+                                // Clear then paste
+                                et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs)
+                                et.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                                et.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Clipboard paste fallback failed: ${e.message}")
+                            }
+                        }
+                    }
                     break
                 }
             }
