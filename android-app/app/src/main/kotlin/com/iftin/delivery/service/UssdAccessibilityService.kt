@@ -157,7 +157,7 @@ class UssdAccessibilityService : AccessibilityService() {
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
         private const val DEBOUNCE_MS = 800L
-        private const val CLICK_DELAY_MS = 350L
+        private const val CLICK_DELAY_MS = 900L
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
     
@@ -1515,7 +1515,10 @@ class UssdAccessibilityService : AccessibilityService() {
             } finally { rt.recycle() }
         }
         scheduledSubmitRunnable = r
-        handler.postDelayed(r, 300)
+        // Give the EditText enough time to commit the typed value before pressing
+        // Send. Some carrier dialogs (Somtel) fire "Input required, Try again" if
+        // Send is dispatched too quickly after ACTION_SET_TEXT.
+        handler.postDelayed(r, 1200)
         return true
     }
 
