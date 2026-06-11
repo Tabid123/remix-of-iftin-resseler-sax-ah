@@ -1312,10 +1312,23 @@ class UssdAccessibilityService : AccessibilityService() {
                 lower.contains("password") ||
                 lower.contains("furaha")
         )
-        val step = flow.steps.firstOrNull { s ->
+        val matchedStep = flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
+        }
+        val step = matchedStep ?: flow.steps.firstOrNull { s ->
+            s.order !in completedFlowSteps &&
+                !s.isPinField &&
+                completedFlowSteps.isNotEmpty() &&
+                !isMenuList &&
+                !looksLikePinDialog &&
+                hasVisibleEditableInput(root)
+        }?.also { fallbackStep ->
+            Log.w(
+                TAG,
+                "🧭 Flow ${flow.triggerCode}: no keyword matched for dialog; using sequential fallback step #${fallbackStep.order}. completed=$completedFlowSteps dialog=${dialogText.take(120)}"
+            )
         }
         if (step == null) {
             Log.d(TAG, "ℹ️ Flow ${flow.triggerCode}: no step matched. completed=$completedFlowSteps dialog=${dialogText.take(120)}")
@@ -1598,6 +1611,16 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error finding EditTexts: ${e.message}")
+        }
+    }
+
+    private fun hasVisibleEditableInput(root: AccessibilityNodeInfo): Boolean {
+        val edits = mutableListOf<AccessibilityNodeInfo>()
+        return try {
+            findEditTexts(root, edits)
+            edits.any { it.isVisibleToUser && it.isEnabled }
+        } finally {
+            edits.forEach { it.recycle() }
         }
     }
 
