@@ -92,12 +92,19 @@ object UssdFlowsClient {
     fun findFlowForTrigger(trigger: String?): Flow? {
         if (trigger.isNullOrBlank()) return null
         loadFlows()
-        return byTrigger[normalizeTrigger(trigger)]
+        val key = normalizeTrigger(trigger)
+        byTrigger[key]?.let { return it }
+        // Miss → force refresh once (new/updated flow may not be in cache yet)
+        loadFlows(force = true)
+        return byTrigger[key]
     }
 
     fun findFlowById(id: String?): Flow? {
         if (id.isNullOrBlank()) return null
         loadFlows()
+        byId[id]?.let { return it }
+        // Miss → force refresh once (admin may have just enabled/edited this flow)
+        loadFlows(force = true)
         return byId[id]
     }
 
