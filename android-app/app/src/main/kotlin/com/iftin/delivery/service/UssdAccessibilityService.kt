@@ -981,6 +981,7 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun shouldHardStopForPinStage(root: AccessibilityNodeInfo?, dialogText: String?): Boolean {
         if (isPinPromptText(dialogText)) return true
         val resolvedText = dialogText?.takeIf { it.isNotBlank() } ?: root?.let { extractDialogText(it) }
+        if (looksLikeNumberedMenu(resolvedText.orEmpty())) return false
         return matchesPendingPinFlowStep(resolvedText)
     }
 
@@ -1019,6 +1020,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         
         serviceInfo = info
+        UssdFlowsClient.warmCacheAsync()
         Log.d(TAG, "🎯 Listening to ALL apps for USSD dialogs (no package filter)")
     }
 

@@ -1,8 +1,10 @@
 package com.iftin.delivery.api
 
+import android.os.Looper
 import android.util.Log
 import okhttp3.Request
 import org.json.JSONArray
+import kotlin.concurrent.thread
 
 /**
  * Fetches dynamic USSD flows + steps from Supabase.
@@ -29,11 +31,33 @@ object UssdFlowsClient {
     @Volatile private var byTrigger: Map<String, Flow> = emptyMap()
     @Volatile private var byId: Map<String, Flow> = emptyMap()
     @Volatile private var cacheLoadedAt: Long = 0L
+    @Volatile private var preloadInFlight = false
     private const val CACHE_TTL_MS = 5 * 60 * 1000L
+
+    fun warmCacheAsync(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && byTrigger.isNotEmpty() && now - cacheLoadedAt < CACHE_TTL_MS) {
+            return
+        }
+        if (preloadInFlight) return
+        preloadInFlight = true
+        thread(name = "UssdFlowsWarmup", isDaemon = true) {
+            try {
+                loadFlows(force = force)
+            } finally {
+                preloadInFlight = false
+            }
+        }
+    }
 
     fun loadFlows(force: Boolean = false): Map<String, Flow> {
         val now = System.currentTimeMillis()
         if (!force && byTrigger.isNotEmpty() && now - cacheLoadedAt < CACHE_TTL_MS) {
+            return byTrigger
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.w(TAG, "loadFlows called on main thread; returning cache and warming async")
+            warmCacheAsync(force = force)
             return byTrigger
         }
         return try {
@@ -57,7 +81,7 @@ object UssdFlowsClient {
                     val id = f.optString("id").trim()
                     val trigger = f.optString("trigger_code").trim()
                     if (id.isBlank() || trigger.isBlank()) continue
-                    val stepsArr = f.optJSONArray("ussd_flow_steps") ?: continue
+                    val stepsArr = f.optJSONArray("ussd_flow_steps") ?: JSONArray()
                     val steps = mutableListOf<FlowStep>()
                     for (j in 0 until stepsArr.length()) {
                         val s = stepsArr.getJSONObject(j)
@@ -77,9 +101,11 @@ object UssdFlowsClient {
                     outTrigger[normalizeTrigger(trigger)] = flow
                     outId[id] = flow
                 }
-                byTrigger = outTrigger
-                byId = outId
-                cacheLoadedAt = now
+                synchronized(this) {
+                    byTrigger = outTrigger
+                    byId = outId
+                    cacheLoadedAt = now
+                }
                 Log.d(TAG, "Loaded ${outTrigger.size} USSD flows")
                 outTrigger
             }
