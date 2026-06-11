@@ -24,6 +24,7 @@ import com.iftin.delivery.MainActivity
 import com.iftin.delivery.R
 import com.iftin.delivery.api.DeliveryApiClient
 import com.iftin.delivery.api.DeliveryApiClient.DeviceSimConfig
+import com.iftin.delivery.api.UssdFlowsClient
 import com.iftin.delivery.data.DeliveryDatabase
 import com.iftin.delivery.data.DeliveryTask
 import kotlinx.coroutines.*
@@ -1204,10 +1205,13 @@ class UssdDialerService : Service() {
                 .putString("current_provider", order.provider)
                 .putString("current_ussd_method", order.ussdMethod ?: "")
                 .putString("current_ussd_single_template", order.ussdSingleTemplate ?: "")
-                .putString("current_ussd_flow_id", order.ussdFlowId ?: "")
+                .putString("current_ussd_flow_id", order.ussdFlowId?.takeIf { it.isNotBlank() })
                 .putString("current_delivery_id", order.id)
                 .apply()
             android.util.Log.d("UssdDialer", "🔐 Flow context saved: pin=${pinToUse.take(2)}***, receiver=${order.receiverPhone}, topup=${order.topupAmount}, trigger=$triggerCode, method=${order.ussdMethod}, flowId=${order.ussdFlowId}")
+            withContext(Dispatchers.IO) {
+                UssdFlowsClient.loadFlows(force = true)
+            }
             
             // Clear any stale USSD response before dialing
             getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
