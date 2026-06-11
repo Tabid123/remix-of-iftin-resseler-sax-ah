@@ -164,6 +164,7 @@ class UssdAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var clickCount = 0
     private var lastClickTime = 0L
+    private var lastDialogFingerprint = ""
     private var multiDialogRunnable: Runnable? = null
 
     // Session guards to prevent duplicate PIN entry
@@ -321,6 +322,7 @@ class UssdAccessibilityService : AccessibilityService() {
         submitCount = 0
         ignoredEventCount = 0
         isProcessingDialog = false
+        lastDialogFingerprint = ""
         hudFirstReadLen = -1
         hudAttemptCount = 0
         Log.d(TAG, "♻️ Session state reset ($reason)")
@@ -1007,9 +1009,12 @@ class UssdAccessibilityService : AccessibilityService() {
         
         // Configure service - NO packageNames filter to listen to ALL apps
         val info = AccessibilityServiceInfo().apply {
-            // STATE-only at runtime to match XML config. CONTENT_CHANGED echoes from
-            // ACTION_SET_TEXT/PASTE were causing re-entry → duplicate PIN writes → "Invalid PIN format".
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            // Listen to both STATE_CHANGED and WINDOW_CONTENT_CHANGED.
+            // Some carriers render the next USSD step by updating the same dialog
+            // instead of opening a brand-new window, so receiver/amount prompts only
+            // arrive as content changes.
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -1068,9 +1073,10 @@ class UssdAccessibilityService : AccessibilityService() {
         if (!isUssdPackage && !isPhonePackage) return
 
         // ===== HARDENED EVENT FILTERING =====
-        // 1. Process ONLY TYPE_WINDOW_STATE_CHANGED — content_changed echoes from
-        //    ACTION_SET_TEXT cause re-entry → duplicate PIN write → "Invalid PIN format".
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // 1. Process only USSD dialog transitions we care about.
+        val isRelevantEvent = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        if (!isRelevantEvent) {
             ignoredEventCount++
             if (ignoredEventCount % 10 == 1) {
                 Log.d(TAG, "🚫 Ignoring non-STATE event type=${event.eventType} (total ignored=$ignoredEventCount)")
@@ -1084,6 +1090,11 @@ class UssdAccessibilityService : AccessibilityService() {
             ?.joinToString(" | ")
             ?.takeIf { it.isNotBlank() }
             ?: pinCheckRoot?.let { extractDialogText(it) }
+        val dialogFingerprint = eventDialogText
+            ?.lowercase()
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(220)
+            .orEmpty()
 
         if (shouldHardStopForPinStage(pinCheckRoot, eventDialogText)) {
             cancelPendingAutoActions("onAccessibilityEvent-pin-top")
@@ -1096,17 +1107,21 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         pinCheckRoot?.recycle()
 
-        // 2. SET_TEXT echo suppression window
+        // 2. SET_TEXT suppression is only for content echoes caused by our own write.
+        // Real carrier navigation to the next USSD page must still be handled.
         val now = System.currentTimeMillis()
-        if (now < setTextSuppressUntilMs) {
-            Log.d(TAG, "🤫 SET_TEXT suppression active (${setTextSuppressUntilMs - now}ms left) — ignoring event")
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && now < setTextSuppressUntilMs) {
+            Log.d(TAG, "🤫 SET_TEXT suppression active (${setTextSuppressUntilMs - now}ms left) — ignoring content echo")
             return
         }
 
         // 3. Debounce
-        if (now - lastClickTime < DEBOUNCE_MS) {
+        if (now - lastClickTime < DEBOUNCE_MS && dialogFingerprint.isNotBlank() && dialogFingerprint == lastDialogFingerprint) {
             Log.d(TAG, "⏳ Debounce: ignoring event (${now - lastClickTime}ms since last click)")
             return
+        }
+        if (dialogFingerprint.isNotBlank()) {
+            lastDialogFingerprint = dialogFingerprint
         }
 
         // 4. Single in-flight processing lock
@@ -1413,7 +1428,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
 
-        // Suppress the CONTENT_CHANGED echo from this SET_TEXT
+        // Keep a short marker for potential SET_TEXT echo events only.
+        // onAccessibilityEvent no longer suppresses TYPE_WINDOW_STATE_CHANGED using this,
+        // so the next USSD screen can still be processed immediately.
         setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
         completedFlowSteps.add(step.order)
 
