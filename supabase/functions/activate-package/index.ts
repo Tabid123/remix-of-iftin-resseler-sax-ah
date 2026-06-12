@@ -623,6 +623,10 @@ serve(async (req) => {
         console.log('✅ Provider indicates SUCCESS - marking completed (no retry ever)');
       } else if (status === 'completed') {
         normalizedStatus = 'completed';
+      } else if (status === 'pending') {
+        normalizedStatus = 'pending';
+        autoRetryTriggered = true;
+        console.log('🔁 Android requested background retry - returning queue to pending with cooldown.');
       } else if (status === 'timeout') {
         normalizedStatus = 'timeout';
         console.log('⏱️ Status TIMEOUT: USSD sent but no provider response. Needs manual verification.');
