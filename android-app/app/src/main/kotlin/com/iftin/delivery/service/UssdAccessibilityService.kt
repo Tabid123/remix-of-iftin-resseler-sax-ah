@@ -157,7 +157,8 @@ class UssdAccessibilityService : AccessibilityService() {
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
         private const val DEBOUNCE_MS = 800L
-        private const val CLICK_DELAY_MS = 900L
+        private const val CLICK_DELAY_MS = 1400L
+        private const val NON_PIN_SUBMIT_DELAY_MS = 1800L
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
     
@@ -1448,7 +1449,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            submitPinOnce(delayMs = 600L, source = "flow-step-${step.order}")
+            submitPinOnce(delayMs = 900L, source = "flow-step-${step.order}")
             return true
         }
 
@@ -1536,9 +1537,9 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         scheduledSubmitRunnable = r
         // Give the EditText enough time to commit the typed value before pressing
-        // Send. Some carrier dialogs (Somtel) fire "Input required, Try again" if
-        // Send is dispatched too quickly after ACTION_SET_TEXT.
-        handler.postDelayed(r, 1200)
+        // Send. Some carrier dialogs (Somtel/Hormuud) fire "Input required, Try again"
+        // if Send is dispatched too quickly after ACTION_SET_TEXT / PASTE.
+        handler.postDelayed(r, NON_PIN_SUBMIT_DELAY_MS)
         return true
     }
 
@@ -1710,17 +1711,27 @@ class UssdAccessibilityService : AccessibilityService() {
                 val visibleEditables = candidates.filter { it.isVisible && it.isEnabled && it.isEditable }
                 val hasAny = visibleEditables.isNotEmpty()
                 val hasEmpty = visibleEditables.any { it.existingTextLength == 0 }
-                Pair(hasAny, hasEmpty)
+                val hasFilled = visibleEditables.any { it.existingTextLength > 0 }
+                Triple(hasAny, hasEmpty, hasFilled)
             } finally {
                 candidates.forEach { it.node.recycle() }
             }
-        } catch (_: Exception) { Pair(false, false) }
+        } catch (_: Exception) { Triple(false, false, false) }
 
         val hasEditableInput = inputState.first
         val hasEmptyEditableInput = inputState.second
+        val hasFilledEditableInput = inputState.third
 
         // 1. Before verified PIN auto-submit starts, keep the generic loop away from Send.
         if (pinFilledForSession && hasEditableInput && !pinSubmittedForSession) return true
+
+        // 1b. For generic/non-PIN dialogs, never auto-click while an editable field exists
+        // but still has no committed text yet. This avoids racing ACTION_SET_TEXT/PASTE
+        // and pressing Send before the carrier dialog actually receives the value.
+        if (hasEditableInput && !hasFilledEditableInput) {
+            Log.i(TAG, "🛑 Suppressing auto-click — editable dialog has no committed text yet")
+            return true
+        }
 
         // 2. If the dialog still has an empty input box, refuse to click Send/OK —
         //    something must be typed first (either by a dynamic flow step or the user).
