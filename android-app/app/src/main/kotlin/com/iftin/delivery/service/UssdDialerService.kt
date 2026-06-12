@@ -367,6 +367,14 @@ class UssdDialerService : Service() {
             android.util.Log.d("UssdDialer", "📤 Starting Bulk SMS Realtime listener (WebSocket)")
             startBulkSmsRealtimeListener()
         }
+
+        // DELIVERY QUEUE - Supabase Realtime WebSocket (instant order pickup)
+        // Listens for INSERT events on delivery_queue → triggers pollPendingOrders() immediately.
+        // This eliminates the 12-20s polling delay before a new order is picked up.
+        serviceScope.launch {
+            android.util.Log.d("UssdDialer", "🚚 Starting Delivery Queue Realtime listener (WebSocket)")
+            startDeliveryQueueRealtimeListener()
+        }
         
         // BULK SMS FALLBACK POLL - every 30s, in case Realtime WebSocket fails silently
         serviceScope.launch {
