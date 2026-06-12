@@ -1469,26 +1469,10 @@ class UssdAccessibilityService : AccessibilityService() {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
                 }
                 et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs)
-                try { SystemClock.sleep(120L) } catch (_: Exception) {}
-                // Type character-by-character with a small delay between each
-                // keystroke so the dialog/IME doesn't get overwhelmed ("boobsiis").
-                // Some carrier dialers reject instant full-string SET_TEXT or strip
-                // characters when the input filter is busy. Gradual typing matches
-                // a human pace and stays compatible with numeric input filters.
-                var built = ""
-                var stepOk = true
-                for (ch in response) {
-                    built += ch
-                    val stepArgs = android.os.Bundle().apply {
-                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, built)
-                    }
-                    if (!et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, stepArgs)) {
-                        stepOk = false
-                        break
-                    }
-                    try { SystemClock.sleep(140L) } catch (_: Exception) {}
+                val args = android.os.Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, response)
                 }
-                if (stepOk) {
+                if (et.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
                     typed = true
                     // Verify the dot wasn't stripped by a numeric input filter
                     // (some carrier dialers use inputType=number which removes '.').
