@@ -367,14 +367,6 @@ class UssdDialerService : Service() {
             android.util.Log.d("UssdDialer", "📤 Starting Bulk SMS Realtime listener (WebSocket)")
             startBulkSmsRealtimeListener()
         }
-
-        // DELIVERY QUEUE - Supabase Realtime WebSocket (instant order pickup)
-        // Listens for INSERT events on delivery_queue → triggers pollPendingOrders() immediately.
-        // This eliminates the 12-20s polling delay before a new order is picked up.
-        serviceScope.launch {
-            android.util.Log.d("UssdDialer", "🚚 Starting Delivery Queue Realtime listener (WebSocket)")
-            startDeliveryQueueRealtimeListener()
-        }
         
         // BULK SMS FALLBACK POLL - every 30s, in case Realtime WebSocket fails silently
         serviceScope.launch {
@@ -553,160 +545,6 @@ class UssdDialerService : Service() {
     
     @Volatile
     private var isBulkSmsProcessing = false
-
-    // ==================== DELIVERY QUEUE via SUPABASE REALTIME ====================
-
-    private var deliveryQueueWebSocket: okhttp3.WebSocket? = null
-
-    /**
-     * Connect to Supabase Realtime WebSocket and listen for delivery_queue INSERTs.
-     * On every new pending row → immediately triggers pollPendingOrders() so the device
-     * claims the order in <1s instead of waiting for the next polling tick.
-     */
-    private suspend fun startDeliveryQueueRealtimeListener() {
-        var retryDelay = 3000L
-
-        while (isRunning) {
-            try {
-                android.util.Log.d("UssdDialer", "🔌 Connecting to Supabase Realtime for delivery_queue...")
-
-                val wsUrl = "wss://zshzcuomdegeijqznvvu.supabase.co/realtime/v1/websocket?apikey=${apiClient.getAnonKey()}&vsn=1.0.0"
-                val request = Request.Builder().url(wsUrl).build()
-
-                val connected = CompletableDeferred<Boolean>()
-
-                deliveryQueueWebSocket = realtimeClient.newWebSocket(request, object : okhttp3.WebSocketListener() {
-
-                    override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
-                        android.util.Log.d("UssdDialer", "✅ delivery_queue Realtime connected")
-                        retryDelay = 3000L
-
-                        val joinPhoenix = JSONObject().apply {
-                            put("topic", "phoenix")
-                            put("event", "phx_join")
-                            put("payload", JSONObject())
-                            put("ref", "1")
-                        }
-                        webSocket.send(joinPhoenix.toString())
-
-                        // Subscribe to ALL INSERTs on delivery_queue.
-                        // The claim_next_delivery RPC will scope by provider + device, so we
-                        // can safely react to any new pending row.
-                        val subscribePayload = JSONObject().apply {
-                            put("topic", "realtime:public:delivery_queue")
-                            put("event", "phx_join")
-                            put("payload", JSONObject().apply {
-                                put("config", JSONObject().apply {
-                                    put("broadcast", JSONObject().put("self", false))
-                                    put("presence", JSONObject().put("key", ""))
-                                    put("postgres_changes", org.json.JSONArray().apply {
-                                        put(JSONObject().apply {
-                                            put("event", "INSERT")
-                                            put("schema", "public")
-                                            put("table", "delivery_queue")
-                                        })
-                                        put(JSONObject().apply {
-                                            // Also catch UPDATE → pending (auto-recover / retry)
-                                            put("event", "UPDATE")
-                                            put("schema", "public")
-                                            put("table", "delivery_queue")
-                                        })
-                                    })
-                                })
-                            })
-                            put("ref", "2")
-                        }
-                        webSocket.send(subscribePayload.toString())
-                        connected.complete(true)
-                    }
-
-                    override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
-                        try {
-                            val msg = JSONObject(text)
-                            val event = msg.optString("event", "")
-
-                            if (event == "phx_reply" || event == "phx_close") return
-
-                            if (msg.optString("topic", "").startsWith("realtime:") && event == "postgres_changes") {
-                                val payload = msg.optJSONObject("payload")
-                                val data = payload?.optJSONObject("data")
-                                val record = data?.optJSONObject("record")
-                                val status = record?.optString("status")
-
-                                if (status == "pending") {
-                                    android.util.Log.d("UssdDialer", "⚡ Realtime: New pending delivery — triggering immediate claim")
-                                    if (!isProcessingOrder) {
-                                        serviceScope.launch {
-                                            try {
-                                                pollPendingOrders(getBatteryLevel(), isCharging())
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("UssdDialer", "❌ Realtime-triggered poll error: ${e.message}")
-                                            }
-                                        }
-                                    } else {
-                                        android.util.Log.d("UssdDialer", "⏳ Realtime trigger skipped: already processing order ($activeQueueId)")
-                                    }
-                                }
-                            }
-
-                            if (event == "heartbeat" || msg.optString("topic") == "phoenix") {
-                                val heartbeat = JSONObject().apply {
-                                    put("topic", "phoenix")
-                                    put("event", "heartbeat")
-                                    put("payload", JSONObject())
-                                    put("ref", System.currentTimeMillis().toString())
-                                }
-                                webSocket.send(heartbeat.toString())
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("UssdDialer", "❌ delivery_queue Realtime parse error: ${e.message}")
-                        }
-                    }
-
-                    override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
-                        android.util.Log.e("UssdDialer", "❌ delivery_queue Realtime failed: ${t.message}")
-                        connected.complete(false)
-                    }
-
-                    override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
-                        android.util.Log.w("UssdDialer", "🔌 delivery_queue Realtime closed: $reason")
-                        connected.complete(false)
-                    }
-                })
-
-                val success = connected.await()
-                if (success) {
-                    while (isRunning && deliveryQueueWebSocket != null) {
-                        delay(15000L)
-                        try {
-                            val heartbeat = JSONObject().apply {
-                                put("topic", "phoenix")
-                                put("event", "heartbeat")
-                                put("payload", JSONObject())
-                                put("ref", System.currentTimeMillis().toString())
-                            }
-                            deliveryQueueWebSocket?.send(heartbeat.toString()) ?: break
-                        } catch (e: Exception) {
-                            android.util.Log.e("UssdDialer", "❌ delivery_queue heartbeat failed: ${e.message}")
-                            break
-                        }
-                    }
-                }
-
-                deliveryQueueWebSocket?.close(1000, "Reconnecting")
-                deliveryQueueWebSocket = null
-
-            } catch (e: Exception) {
-                android.util.Log.e("UssdDialer", "❌ delivery_queue Realtime error: ${e.message}")
-            }
-
-            if (isRunning) {
-                android.util.Log.d("UssdDialer", "🔄 Reconnecting delivery_queue Realtime in ${retryDelay / 1000}s...")
-                delay(retryDelay)
-                retryDelay = (retryDelay * 2).coerceAtMost(60000L)
-            }
-        }
-    }
 
     /**
      * Process ALL pending bulk SMS items for this device in batches.
@@ -1465,21 +1303,20 @@ class UssdDialerService : Service() {
                 }
                 android.util.Log.d("UssdDialer", "✅ Order ${order.orderId} finished with status: $finalStatus")
             } else {
-                // Background-only silent USSD can fail temporarily on some OEMs / SIM states.
-                // Do NOT final-fail immediately; return the queue row to pending so the backend
-                // scheduler and realtime listener can retry without exposing the dialer UI.
-                val retryMessage = "Silent USSD failed temporarily - retrying in background"
+                // Dial failed (permission issue or no SIM) - mark as failed
                 val statusUpdated = updateDeliveryStatusWithRetry(
                     queueId = order.id,
-                    status = "pending",
-                    errorMessage = retryMessage,
+                    status = "failed",
+                    errorMessage = "USSD dial failed - check permissions and SIM",
                     providerResponse = null
                 )
-                database.deliveryTaskDao().updateStatus(order.id, "pending")
-                if (!statusUpdated) {
-                    saveToOfflineQueue(order.id, "pending", retryMessage, null)
+                database.deliveryTaskDao().updateStatus(order.id, "failed")
+                if (statusUpdated) {
+                    updateStats(success = false)
+                } else {
+                    saveToOfflineQueue(order.id, "failed", "USSD dial failed", null)
                 }
-                android.util.Log.w("UssdDialer", "⚠️ Order ${order.orderId} silent USSD did not start - returned to pending for background retry")
+                android.util.Log.e("UssdDialer", "❌ Order ${order.orderId} failed - could not dial USSD")
             }
             
         } catch (e: Exception) {
@@ -1768,15 +1605,10 @@ class UssdDialerService : Service() {
                     return true
                 }
                 
-                // BACKGROUND-ONLY MODE: do NOT open the dialer if silent USSD fails.
-                // The order stays in the queue and will be retried on the next claim cycle.
-                // This prevents the dialer screen from ever showing on the device (even when locked).
-                android.util.Log.w("UssdDialer", "⚠️ Silent USSD failed — background-only mode, NOT opening dialer. Will retry.")
-                return false
+                android.util.Log.d("UssdDialer", "⚠️ Silent USSD failed, trying Intent fallback...")
             }
-
-            // Pre-Android 8.0 devices: no silent USSD API available — last-resort dialer fallback.
-            android.util.Log.w("UssdDialer", "⚠️ Android <8.0 detected, silent USSD unavailable. Falling back to dialer Intent.")
+            
+            // FALLBACK: Use Intent.ACTION_CALL (shows dialer)
             return dialUssdViaIntent(finalUssd, subscriptionId, provider)
             
         } catch (e: Exception) {
