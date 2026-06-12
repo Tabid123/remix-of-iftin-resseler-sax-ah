@@ -1605,10 +1605,15 @@ class UssdDialerService : Service() {
                     return true
                 }
                 
-                android.util.Log.d("UssdDialer", "⚠️ Silent USSD failed, trying Intent fallback...")
+                // BACKGROUND-ONLY MODE: do NOT open the dialer if silent USSD fails.
+                // The order stays in the queue and will be retried on the next claim cycle.
+                // This prevents the dialer screen from ever showing on the device (even when locked).
+                android.util.Log.w("UssdDialer", "⚠️ Silent USSD failed — background-only mode, NOT opening dialer. Will retry.")
+                return false
             }
-            
-            // FALLBACK: Use Intent.ACTION_CALL (shows dialer)
+
+            // Pre-Android 8.0 devices: no silent USSD API available — last-resort dialer fallback.
+            android.util.Log.w("UssdDialer", "⚠️ Android <8.0 detected, silent USSD unavailable. Falling back to dialer Intent.")
             return dialUssdViaIntent(finalUssd, subscriptionId, provider)
             
         } catch (e: Exception) {
