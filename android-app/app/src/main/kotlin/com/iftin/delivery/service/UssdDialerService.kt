@@ -1465,20 +1465,21 @@ class UssdDialerService : Service() {
                 }
                 android.util.Log.d("UssdDialer", "✅ Order ${order.orderId} finished with status: $finalStatus")
             } else {
-                // Dial failed (permission issue or no SIM) - mark as failed
+                // Background-only silent USSD can fail temporarily on some OEMs / SIM states.
+                // Do NOT final-fail immediately; return the queue row to pending so the backend
+                // scheduler and realtime listener can retry without exposing the dialer UI.
+                val retryMessage = "Silent USSD failed temporarily - retrying in background"
                 val statusUpdated = updateDeliveryStatusWithRetry(
                     queueId = order.id,
-                    status = "failed",
-                    errorMessage = "USSD dial failed - check permissions and SIM",
+                    status = "pending",
+                    errorMessage = retryMessage,
                     providerResponse = null
                 )
-                database.deliveryTaskDao().updateStatus(order.id, "failed")
-                if (statusUpdated) {
-                    updateStats(success = false)
-                } else {
-                    saveToOfflineQueue(order.id, "failed", "USSD dial failed", null)
+                database.deliveryTaskDao().updateStatus(order.id, "pending")
+                if (!statusUpdated) {
+                    saveToOfflineQueue(order.id, "pending", retryMessage, null)
                 }
-                android.util.Log.e("UssdDialer", "❌ Order ${order.orderId} failed - could not dial USSD")
+                android.util.Log.w("UssdDialer", "⚠️ Order ${order.orderId} silent USSD did not start - returned to pending for background retry")
             }
             
         } catch (e: Exception) {
