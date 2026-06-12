@@ -47,8 +47,8 @@ class UssdDialerService : Service() {
         private const val PROCESSED_SMS_IDS_KEY = "processed_sms_ids"
         private const val SMS_POLL_INTERVAL_MS = 5000L // 5 seconds — fast payment detection
         private const val SMS_LOOKBACK_MS = 60000L // 1 minute only
-        private const val DAYTIME_POLL_INTERVAL_MS = 12000L  // 05:01-23:59
-        private const val NIGHT_POLL_INTERVAL_MS = 20000L   // 00:00-05:00
+        private const val DAYTIME_POLL_INTERVAL_MS = 12000L  // 05:01-23:59 (fallback only — realtime triggers instantly)
+        private const val NIGHT_POLL_INTERVAL_MS = 20000L   // 00:00-05:00 (fallback only — realtime triggers instantly)
         private const val BUSY_POLL_INTERVAL_MS = 3000L     // when orders found
         private const val JITTER_MAX_MS = 2000L             // 1-2s random jitter
         private const val API_URL = "https://zshzcuomdegeijqznvvu.supabase.co/functions/v1/process-payment-receipt"
