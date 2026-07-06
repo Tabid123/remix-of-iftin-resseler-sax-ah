@@ -82,6 +82,7 @@ const navItems: NavItem[] = [
   { title: "Admin Management", titleSo: "👥 Admins", value: "admin-management", icon: Users, permission: "manage_admins" },
   { title: "Fraud Alerts", titleSo: "🚨 Fraud Alerts", value: "fraud-alerts", icon: AlertTriangle, permission: "view_audit_log" },
   { title: "USSD Flows", titleSo: "📞 USSD Flows", value: "ussd-flows", icon: PhoneCall, permission: "manage_settings" },
+  { title: "USSD Learning", titleSo: "🧠 USSD Learning", value: "ussd-learning", icon: PhoneCall, permission: "manage_settings" },
   { title: "Settings", titleSo: "⚙️ Settings", value: "settings", icon: Settings, permission: "manage_settings" },
 ];
 
