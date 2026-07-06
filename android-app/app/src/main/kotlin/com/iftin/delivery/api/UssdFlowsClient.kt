@@ -3,7 +3,10 @@ package com.iftin.delivery.api
 import android.os.Looper
 import android.util.Log
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /**
@@ -152,10 +155,7 @@ object UssdFlowsClient {
                         if (stepOrder != null) put("step_order", stepOrder)
                         if (!deviceId.isNullOrBlank()) put("device_id", deviceId)
                     }
-                val body = okhttp3.RequestBody.create(
-                    okhttp3.MediaType.parse("application/json"),
-                    payload.toString()
-                )
+                val body = payload.toString().toRequestBody("application/json".toMediaType())
                 val req = Request.Builder()
                     .url("$REST_URL/ussd_unmatched_dialogs")
                     .header("apikey", ANON_KEY)
