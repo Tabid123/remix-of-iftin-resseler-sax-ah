@@ -1378,6 +1378,12 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         if (step == null) {
             Log.d(TAG, "ℹ️ Flow ${flow.triggerCode}: no step matched. completed=$completedFlowSteps dialog=${dialogText.take(120)}")
+            // Self-healing: log this unmatched dialog so admin can teach the system.
+            try {
+                val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                val nextOrder = (completedFlowSteps.maxOrNull() ?: 0) + 1
+                UssdFlowsClient.logUnmatchedAsync(flow.id, nextOrder, dialogText, deviceId)
+            } catch (_: Exception) {}
             return false
         }
 

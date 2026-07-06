@@ -3,7 +3,10 @@ package com.iftin.delivery.api
 import android.os.Looper
 import android.util.Log
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /**
@@ -132,6 +135,46 @@ object UssdFlowsClient {
         // Miss → force refresh once (admin may have just enabled/edited this flow)
         loadFlows(force = true)
         return byId[id]
+    }
+
+    /**
+     * Log an unmatched dialog to Supabase so admins can teach the system new keywords.
+     * Fire-and-forget, dedup by (flow_id, dialog_text) using a per-run in-memory set.
+     */
+    private val unmatchedSeen = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+    fun logUnmatchedAsync(flowId: String?, stepOrder: Int?, dialogText: String?, deviceId: String?) {
+        if (dialogText.isNullOrBlank()) return
+        val key = "${flowId ?: ""}|${dialogText.take(120)}"
+        if (!unmatchedSeen.add(key)) return
+        thread(name = "UssdUnmatchedLog", isDaemon = true) {
+            try {
+                val payload = JSONObject()
+                    .put("dialog_text", dialogText.take(1000))
+                    .apply {
+                        if (!flowId.isNullOrBlank()) put("flow_id", flowId)
+                        if (stepOrder != null) put("step_order", stepOrder)
+                        if (!deviceId.isNullOrBlank()) put("device_id", deviceId)
+                    }
+                val body = payload.toString().toRequestBody("application/json".toMediaType())
+                val req = Request.Builder()
+                    .url("$REST_URL/ussd_unmatched_dialogs")
+                    .header("apikey", ANON_KEY)
+                    .header("Authorization", "Bearer $ANON_KEY")
+                    .header("Content-Type", "application/json")
+                    .header("Prefer", "return=minimal")
+                    .post(body)
+                    .build()
+                DeliveryApiClient.sharedClient.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        Log.w(TAG, "logUnmatched failed: ${resp.code}")
+                    } else {
+                        Log.d(TAG, "📝 Logged unmatched dialog for learning")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "logUnmatched error: ${e.message}")
+            }
+        }
     }
 
     /** Returns all enabled flows (loads if needed). Used for fallback content matching. */

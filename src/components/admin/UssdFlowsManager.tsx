@@ -8,6 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Save, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import AddUssdProviderWizardDialog from './AddUssdProviderWizardDialog';
+import { Sparkles } from 'lucide-react';
 
 interface FlowStep {
   id?: string;
@@ -42,6 +44,7 @@ export default function UssdFlowsManager() {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -232,7 +235,12 @@ export default function UssdFlowsManager() {
         <Button onClick={createFlow}>
           <Plus className="w-4 h-4 mr-1" /> New Flow
         </Button>
+        <Button variant="default" className="ml-2" onClick={() => setWizardOpen(true)}>
+          <Sparkles className="w-4 h-4 mr-1" /> Wizard: Ku dar Shirkad Cusub
+        </Button>
       </div>
+
+      <AddUssdProviderWizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onCreated={load} />
 
       {flows.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground">
