@@ -1778,6 +1778,53 @@ export type Database = {
           },
         ]
       }
+      ussd_unmatched_dialogs: {
+        Row: {
+          auto_learned: boolean
+          created_at: string
+          device_id: string | null
+          dialog_text: string
+          flow_id: string | null
+          id: string
+          matched: boolean
+          resolved: boolean
+          step_order: number | null
+          suggested_step_id: string | null
+        }
+        Insert: {
+          auto_learned?: boolean
+          created_at?: string
+          device_id?: string | null
+          dialog_text: string
+          flow_id?: string | null
+          id?: string
+          matched?: boolean
+          resolved?: boolean
+          step_order?: number | null
+          suggested_step_id?: string | null
+        }
+        Update: {
+          auto_learned?: boolean
+          created_at?: string
+          device_id?: string | null
+          dialog_text?: string
+          flow_id?: string | null
+          id?: string
+          matched?: boolean
+          resolved?: boolean
+          step_order?: number | null
+          suggested_step_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ussd_unmatched_dialogs_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "ussd_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verified_phones: {
         Row: {
           created_at: string
@@ -2107,6 +2154,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      learn_ussd_keyword: {
+        Args: { _kw: string; _step_id: string }
+        Returns: undefined
+      }
+      resolve_unmatched_dialog: {
+        Args: { _id: string; _step_id: string }
+        Returns: undefined
       }
     }
     Enums: {
