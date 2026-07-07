@@ -1,4 +1,4 @@
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import { theme } from "../theme";
 import { display, body } from "../fonts";
 
@@ -121,11 +121,11 @@ export const Scene3: React.FC = () => {
             <Chip text="value" delay={126} />
             <Chip text="sum" delay={132} />
           </div>
-          <Sequence from={140}>
+          {frame >= 140 && (
             <div style={{ color: theme.success, fontFamily: body, fontSize: 22, fontWeight: 600 }}>
               ✓ ~85% match si otomaatig ah
             </div>
-          </Sequence>
+          )}
         </div>
       </div>
     </AbsoluteFill>

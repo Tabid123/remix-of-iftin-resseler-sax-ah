@@ -1,4 +1,4 @@
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import { theme } from "../theme";
 import { display, body } from "../fonts";
 
@@ -85,15 +85,13 @@ export const Scene2: React.FC = () => {
         <SidebarItem label="👥 Users" delay={50} />
       </div>
 
-      <Sequence from={70}>
-        <ClickRipple />
-      </Sequence>
+      {frame >= 70 && <ClickRipple startFrame={70} />}
     </AbsoluteFill>
   );
 };
 
-const ClickRipple: React.FC = () => {
-  const frame = useCurrentFrame();
+const ClickRipple: React.FC<{ startFrame: number }> = ({ startFrame }) => {
+  const frame = useCurrentFrame() - startFrame;
   const { fps } = useVideoConfig();
   const s = spring({ frame, fps, config: { damping: 12 } });
   const scale = interpolate(s, [0, 1], [0.3, 2.2]);

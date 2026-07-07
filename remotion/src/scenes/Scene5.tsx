@@ -1,4 +1,4 @@
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import { theme } from "../theme";
 import { display, body } from "../fonts";
 
@@ -78,7 +78,7 @@ export const Scene5: React.FC = () => {
         <Row dialog="Geli PIN-kaaga" delay={38} />
       </div>
 
-      <Sequence from={110}>
+      {frame >= 110 && (
         <div
           style={{
             marginTop: 30,
@@ -92,7 +92,7 @@ export const Scene5: React.FC = () => {
         >
           Hal riix → Wax bar → 100% otomaatig
         </div>
-      </Sequence>
+      )}
     </AbsoluteFill>
   );
 };
