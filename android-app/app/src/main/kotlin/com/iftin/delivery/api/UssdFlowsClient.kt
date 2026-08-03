@@ -37,6 +37,39 @@ object UssdFlowsClient {
     @Volatile private var preloadInFlight = false
     private const val CACHE_TTL_MS = 5 * 60 * 1000L
 
+    /**
+     * HARD-CODED fallback flows. Used when the network is unavailable, the remote
+     * fetch fails, or the requested flow/trigger is missing from the server payload.
+     * These guarantee Somtel + Somnet keep working 100% offline.
+     */
+    private val BUILTIN_FLOWS: List<Flow> = listOf(
+        Flow(
+            id = "a0204e0c-f82e-464a-93ae-eb901422ec39",
+            triggerCode = "*300#",
+            steps = listOf(
+                FlowStep(1, listOf("reseller", "reseller service", "transfer", "wareeji"), "3", false),
+                FlowStep(2, listOf("receiver", "reciver", "number", "phone", "lambar", "geli lambar", "telefoon", "enter number", "taleefan", "geli taleefan", "wareejineeso"), "{receiver}", false),
+                FlowStep(3, listOf("amount", "lacag", "lacagta", "qiimo", "qiimaha", "wadarta", "enter amount", "dollar", "total"), "{amount}", false),
+                FlowStep(4, listOf("pin", "furaha", "sirta", "password", "secret", "enter pin", "geli pin", "pin-kaaga", "ma hubtaa"), "{pin}", true)
+            )
+        ),
+        Flow(
+            id = "00ba757f-cc74-4def-a45b-0f11c7d9730b",
+            triggerCode = "*825#",
+            steps = listOf(
+                FlowStep(1, listOf("dirid", "dirid lacag", "lacag", "lacagta", "amount", "send money", "send", "qiime", "qiimo"), "2", false),
+                FlowStep(2, listOf("geli mobile", "mobile", "mobilka", "mobile-ka", "lambarka", "taleefan", "number"), "{receiver}", false),
+                FlowStep(3, listOf("hubi", "hubi mobil", "confirm", "xaqiiji", "lambarka", "number"), "{receiver}", false),
+                FlowStep(4, listOf("geli lacagta", "lacagta", "amount", "qiimaha", "enter amount"), "{amount}", false),
+                FlowStep(5, listOf("ma hubtaa", "haa", "confirm", "xaqiiji", "yes"), "1", false),
+                FlowStep(6, listOf("pin", "furaha", "sirta", "password", "secret", "geli pin", "pin-kaaga"), "{pin}", true)
+            )
+        )
+    )
+
+    private val builtinByTrigger: Map<String, Flow> = BUILTIN_FLOWS.associateBy { normalizeTrigger(it.triggerCode) }
+    private val builtinById: Map<String, Flow> = BUILTIN_FLOWS.associateBy { it.id }
+
     fun warmCacheAsync(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && byTrigger.isNotEmpty() && now - cacheLoadedAt < CACHE_TTL_MS) {
@@ -105,16 +138,17 @@ object UssdFlowsClient {
                     outId[id] = flow
                 }
                 synchronized(this) {
-                    byTrigger = outTrigger
-                    byId = outId
+                    // Remote wins, built-ins fill any gaps
+                    byTrigger = builtinByTrigger + outTrigger
+                    byId = builtinById + outId
                     cacheLoadedAt = now
                 }
-                Log.d(TAG, "Loaded ${outTrigger.size} USSD flows")
-                outTrigger
+                Log.d(TAG, "Loaded ${outTrigger.size} USSD flows (+${builtinByTrigger.size} builtin fallbacks)")
+                byTrigger
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading flows: ${e.message}")
-            byTrigger
+            if (byTrigger.isEmpty()) builtinByTrigger else byTrigger
         }
     }
 
@@ -125,7 +159,9 @@ object UssdFlowsClient {
         byTrigger[key]?.let { return it }
         // Miss → force refresh once (new/updated flow may not be in cache yet)
         loadFlows(force = true)
-        return byTrigger[key]
+        return byTrigger[key] ?: builtinByTrigger[key]?.also {
+            Log.w(TAG, "Using BUILTIN hardcoded flow for trigger $key")
+        }
     }
 
     fun findFlowById(id: String?): Flow? {
@@ -134,7 +170,9 @@ object UssdFlowsClient {
         byId[id]?.let { return it }
         // Miss → force refresh once (admin may have just enabled/edited this flow)
         loadFlows(force = true)
-        return byId[id]
+        return byId[id] ?: builtinById[id]?.also {
+            Log.w(TAG, "Using BUILTIN hardcoded flow for id $id")
+        }
     }
 
     /**
@@ -180,7 +218,7 @@ object UssdFlowsClient {
     /** Returns all enabled flows (loads if needed). Used for fallback content matching. */
     fun allFlows(): Collection<Flow> {
         loadFlows()
-        return byTrigger.values
+        return if (byTrigger.isEmpty()) builtinByTrigger.values else byTrigger.values
     }
 
     private fun normalizeTrigger(t: String): String = t.trim().lowercase()
