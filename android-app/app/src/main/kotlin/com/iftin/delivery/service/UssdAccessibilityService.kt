@@ -501,7 +501,7 @@ class UssdAccessibilityService : AccessibilityService() {
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = PASTE then ACTION_SET_TEXT fallback (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = ${methods.joinToString(" → ") { it.first }} (EditText present, package=$activePackage)")
         } else {
             pinWriteFailedForSession = true
             Log.w(TAG, "⚠️ safeEnterPin — no real editable field available, refusing gesture/click fallback for PIN entry")
@@ -1829,6 +1829,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
         if (shouldHardStopForPinStage(root, dialogText)) {
+            return true
+        }
+
+        // Fail closed when this screen is a configured PIN step. A carrier may hide
+        // its EditText from Accessibility, so "no candidate found" must never mean
+        // that the generic Send/OK clicker is allowed to submit an empty PIN.
+        if (matchesConfiguredPinFlowStep(dialogText) &&
+            (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession)
+        ) {
+            Log.i(TAG, "🛑 Suppressing auto-click — configured PIN step is not safely committed")
             return true
         }
 
