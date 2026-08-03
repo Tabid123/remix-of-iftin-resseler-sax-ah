@@ -689,7 +689,32 @@ const AdminDashboard = () => {
   const deleteProvider = async (id: string) => {
     if (!confirm('Ma hubtaa?')) return;
     const { error } = await supabase.from('providers_config').delete().eq('id', id);
-    if (!error) setProviders(prev => prev.filter(p => p.id !== id));
+    if (error) {
+      const isFk = (error as any).code === '23503' || /foreign key|violates/i.test(error.message || '');
+      toast({
+        title: 'Lama tirtiri karo',
+        description: isFk
+          ? 'Shirkaddan waxay leedahay dalabyo (orders) hore loo diray, sidaa darteed lama tirtiri karo. Halkii, ka dhig "Inactive".'
+          : error.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+    // Xaqiiji in dhab ahaan la tirtiray (RLS way iska aamusi kartaa)
+    const { count } = await supabase
+      .from('providers_config')
+      .select('id', { count: 'exact', head: true })
+      .eq('id', id);
+    if (count && count > 0) {
+      toast({
+        title: 'Lama tirtirin',
+        description: 'Ma haysatid ogolaansho (admin) oo ku filan tirtiridda shirkaddan.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setProviders(prev => prev.filter(p => p.id !== id));
+    toast({ title: 'Guul', description: 'Shirkadda waa la tirtiray' });
   };
 
   // ===== Package functions =====
