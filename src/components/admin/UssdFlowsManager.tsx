@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Save, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Save, ChevronUp, ChevronDown, Loader2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import AddUssdProviderWizardDialog from './AddUssdProviderWizardDialog';
 import { Sparkles } from 'lucide-react';
@@ -44,6 +44,7 @@ export default function UssdFlowsManager() {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const load = async () => {
@@ -163,6 +164,54 @@ export default function UssdFlowsManager() {
   };
 
   const deleteFlow = async (id: string) => {
+    if (!confirm('Delete this flow and all its steps?')) return;
+    const { error } = await supabase.from('ussd_flows' as any).delete().eq('id', id);
+    if (error) {
+      toast.error('Failed to delete');
+      return;
+    }
+    setFlows((prev) => prev.filter((f) => f.id !== id));
+    toast.success('Flow deleted');
+  };
+
+  const duplicateFlow = async (flow: Flow) => {
+    setCopyingId(flow.id);
+    try {
+      const { data, error } = await supabase
+        .from('ussd_flows' as any)
+        .insert({
+          flow_name: `${flow.flow_name} (Copy)`,
+          trigger_code: flow.trigger_code,
+          is_enabled: false,
+          notes: flow.notes,
+        })
+        .select()
+        .single();
+      if (error || !data) throw error || new Error('insert failed');
+      const newId = (data as any).id;
+
+      if (flow.steps.length > 0) {
+        const rows = flow.steps.map((s, i) => ({
+          flow_id: newId,
+          step_order: i + 1,
+          match_keywords: s.match_keywords,
+          response_template: s.response_template,
+          is_pin_field: s.is_pin_field,
+        }));
+        const { error: eIns } = await supabase.from('ussd_flow_steps' as any).insert(rows);
+        if (eIns) throw eIns;
+      }
+
+      toast.success('Flow-ga waa la nuqulay — badal magaca + trigger code, kadib Enable + Save');
+      await load();
+    } catch (err: any) {
+      toast.error('Copy failed: ' + (err?.message || 'unknown'));
+    } finally {
+      setCopyingId(null);
+    }
+  };
+
+  const deleteFlowLegacy = async (id: string) => {
     if (!confirm('Delete this flow and all its steps?')) return;
     const { error } = await supabase.from('ussd_flows' as any).delete().eq('id', id);
     if (error) {
@@ -368,6 +417,19 @@ export default function UssdFlowsManager() {
             >
               <Trash2 className="w-4 h-4 mr-1" /> Delete Flow
             </Button>
+            <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => duplicateFlow(flow)}
+              disabled={copyingId === flow.id}
+            >
+              {copyingId === flow.id ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Copy className="w-4 h-4 mr-1" />
+              )}
+              Copy Flow
+            </Button>
             <Button onClick={() => saveFlow(flow)} disabled={savingId === flow.id}>
               {savingId === flow.id ? (
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
@@ -376,6 +438,7 @@ export default function UssdFlowsManager() {
               )}
               Save Flow
             </Button>
+            </div>
           </div>
         </Card>
       ))}
