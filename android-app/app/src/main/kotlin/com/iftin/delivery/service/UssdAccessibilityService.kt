@@ -383,13 +383,12 @@ class UssdAccessibilityService : AccessibilityService() {
                             submitPinOnce(delayMs = 1200L, source = "$source-rewrite$pinRewriteAttempts")
                         }
                     } else {
-                        // DEADLOCK GUARD: some carriers never expose the field text
-                        // (fully hidden password node). If the PIN was verified when
-                        // written, send it anyway instead of freezing the order.
-                        Log.w(TAG, "⚠️ submitPinOnce[$source] field unreadable after $pinRewriteAttempts rewrites — sending verified PIN anyway")
-                        pinSubmittedForSession = true
-                        submitCount++
-                        clickSendOrOkButton(rt)
+                        // Never click Send on an unreadable/empty field. The previous
+                        // deadlock escape submitted anyway and could make Somnet return
+                        // "Invalid PIN format" when its dialog silently discarded the
+                        // programmatic write.
+                        pinWriteFailedForSession = true
+                        Log.e(TAG, "❌ submitPinOnce[$source] blocked after $pinRewriteAttempts rewrites — PIN is not visibly committed; Send will NOT be clicked")
                     }
                     return@Runnable
                 }
@@ -429,8 +428,10 @@ class UssdAccessibilityService : AccessibilityService() {
             try { best.node.refresh() } catch (_: Exception) {}
             val actual = best.node.text?.toString()?.trim().orEmpty()
             val maskedValue = actual.length == expected.length && actual.all { it == '•' || it == '*' }
-            val maskedTreeLength = findMaskedPinLengthInTree(root)
-            actual == expected || maskedValue || (best.isPassword && maskedTreeLength == expected.length)
+            // Only trust the selected EditText itself. A masked string elsewhere in
+            // the window (debug overlay, stale node, another field) must never unlock
+            // Send while the active PIN field is empty.
+            actual == expected || maskedValue
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
@@ -907,9 +908,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val maskedTreeLength = findMaskedPinLengthInTree(root)
         val maskedSelected = actual.isNotEmpty() && actual.all { it == '•' || it == '*' } && actual.length == intendedPin.length
         val exactDigitMatch = actual == intendedPin
-        val passwordLengthOk = isPasswordField && (actual.length == intendedPin.length || maskedTreeLength == intendedPin.length)
-        val maskedTreeOk = maskedTreeLength == intendedPin.length && maskedTreeLength > 0
-        val exactMatch = writeAttempted && (exactDigitMatch || maskedSelected || passwordLengthOk || maskedTreeOk)
+        val selectedPasswordLengthOk = isPasswordField && actual.length == intendedPin.length && actual.isNotBlank()
+        val exactMatch = writeAttempted && (exactDigitMatch || maskedSelected || selectedPasswordLengthOk)
 
         return PinWriteDiagnostics(
             method = method,
