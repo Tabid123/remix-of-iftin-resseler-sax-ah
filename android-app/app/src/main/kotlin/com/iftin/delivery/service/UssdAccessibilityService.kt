@@ -383,7 +383,13 @@ class UssdAccessibilityService : AccessibilityService() {
                             submitPinOnce(delayMs = 1200L, source = "$source-rewrite$pinRewriteAttempts")
                         }
                     } else {
-                        Log.e(TAG, "❌ submitPinOnce[$source] giving up after $pinRewriteAttempts rewrites")
+                        // DEADLOCK GUARD: some carriers never expose the field text
+                        // (fully hidden password node). If the PIN was verified when
+                        // written, send it anyway instead of freezing the order.
+                        Log.w(TAG, "⚠️ submitPinOnce[$source] field unreadable after $pinRewriteAttempts rewrites — sending verified PIN anyway")
+                        pinSubmittedForSession = true
+                        submitCount++
+                        clickSendOrOkButton(rt)
                     }
                     return@Runnable
                 }
