@@ -58,11 +58,11 @@ object UssdFlowsClient {
             triggerCode = "*825#",
             steps = listOf(
                 FlowStep(1, listOf("pin", "furaha", "sirta", "password", "secret", "geli pin", "geli furaha", "pin-kaaga", "enter pin"), "{pin}", true),
-                FlowStep(2, listOf("dirid", "dirid lacag", "lacag", "lacagta", "amount", "send money", "send", "qiime", "qiimo"), "2", false),
-                FlowStep(3, listOf("geli mobile", "mobile", "mobilka", "mobile-ka", "lambarka", "taleefan", "number"), "{receiver}", false),
-                FlowStep(4, listOf("hubi", "hubi mobil", "confirm", "xaqiiji", "lambarka", "number"), "{receiver}", false),
-                FlowStep(5, listOf("geli lacagta", "lacagta", "amount", "qiimaha", "enter amount"), "{amount}", false),
-                FlowStep(6, listOf("ma hubtaa", "haa", "confirm", "xaqiiji", "yes"), "1", false)
+                FlowStep(2, listOf("dirid", "dirid lacag", "lacag dirid", "send money", "lacag", "menu", "xulo", "dooro"), "2", false),
+                FlowStep(3, listOf("geli mobilka", "geli mobile", "fadlan geli mobilka", "mobilka", "mobile", "lambarka", "taleefan", "number"), "{receiver}", false),
+                FlowStep(4, listOf("hubi mobilka", "fadlan hubi mobilka", "hubi mobil", "hubi", "confirm number", "xaqiiji lambarka"), "{receiver}", false),
+                FlowStep(5, listOf("geli lacagta", "fadlan geli lacagta", "lacagta", "amount", "qiimaha", "enter amount"), "{amount}", false),
+                FlowStep(6, listOf("mu hubtaa", "ma hubtaa", "wareejisid", "wareejiso", "haa", "maya", "confirm", "xaqiiji", "yes"), "1", false)
             )
         )
     )
