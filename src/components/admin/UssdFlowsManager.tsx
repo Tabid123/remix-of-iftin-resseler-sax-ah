@@ -211,17 +211,6 @@ export default function UssdFlowsManager() {
     }
   };
 
-  const deleteFlowLegacy = async (id: string) => {
-    if (!confirm('Delete this flow and all its steps?')) return;
-    const { error } = await supabase.from('ussd_flows' as any).delete().eq('id', id);
-    if (error) {
-      toast.error('Failed to delete');
-      return;
-    }
-    setFlows((prev) => prev.filter((f) => f.id !== id));
-    toast.success('Flow deleted');
-  };
-
   const saveFlow = async (flow: Flow) => {
     setSavingId(flow.id);
     try {
