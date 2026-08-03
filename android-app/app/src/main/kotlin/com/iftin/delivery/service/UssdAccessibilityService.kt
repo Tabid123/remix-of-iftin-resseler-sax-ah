@@ -370,8 +370,9 @@ class UssdAccessibilityService : AccessibilityService() {
                 // and sending an empty/partial field produces "Invalid PIN format".
                 val expected = lastIntendedPinForSession
                 val live = readActivePinFieldText(rt)
-                if (expected.isNotBlank() && live != expected) {
-                    Log.w(TAG, "🔁 submitPinOnce[$source] field mismatch (live='${live.length} chars' expected len=${expected.length}) — rewriting PIN")
+                val committed = isPinCommittedInActiveField(rt, expected)
+                if (expected.isNotBlank() && !committed) {
+                    Log.w(TAG, "🔁 submitPinOnce[$source] field not committed (live='${live.length} chars' expected len=${expected.length}) — rewriting PIN")
                     if (pinRewriteAttempts < MAX_PIN_REWRITE_ATTEMPTS) {
                         pinRewriteAttempts++
                         pinFilledForSession = false
@@ -408,6 +409,22 @@ class UssdAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.w(TAG, "readActivePinFieldText error: ${e.message}")
             return ""
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
+    }
+
+    /** Password EditTexts may expose bullets instead of the real digits. */
+    private fun isPinCommittedInActiveField(root: AccessibilityNodeInfo, expected: String): Boolean {
+        if (expected.isBlank()) return false
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            val best = selectBestEditableCandidate(candidates) ?: return false
+            try { best.node.refresh() } catch (_: Exception) {}
+            val actual = best.node.text?.toString()?.trim().orEmpty()
+            val maskedValue = actual.length == expected.length && actual.all { it == '•' || it == '*' }
+            val maskedTreeLength = findMaskedPinLengthInTree(root)
+            actual == expected || maskedValue || (best.isPassword && maskedTreeLength == expected.length)
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
@@ -460,10 +477,16 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
+            // Somnet's first PIN dialog visually accepts ACTION_SET_TEXT but its
+            // carrier TextWatcher can still receive an empty value. PASTE fires the
+            // same input/commit path as user typing; retain SET_TEXT as fallback.
+            methods += "clipboard_paste" to { node: AccessibilityNodeInfo, pin: String ->
+                writeWithClipboardPaste(node, pin, requireFocus = true)
+            }
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = ACTION_SET_TEXT only (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = PASTE then ACTION_SET_TEXT fallback (EditText present, package=$activePackage)")
         } else {
             pinWriteFailedForSession = true
             Log.w(TAG, "⚠️ safeEnterPin — no real editable field available, refusing gesture/click fallback for PIN entry")
@@ -474,7 +497,7 @@ class UssdAccessibilityService : AccessibilityService() {
         var ok = false
         try {
             for ((methodName, writer) in methods) {
-                if (methodName == "action_set_text") {
+                if (methodName == "action_set_text" || methodName == "clipboard_paste") {
                     val existing = preferred.node.text?.toString().orEmpty()
                     if (existing.isNotEmpty() && existing != cleanPin) {
                         clearEditableField(preferred.node)
@@ -482,7 +505,7 @@ class UssdAccessibilityService : AccessibilityService() {
                         focusEditableField(preferred.node, requireAccessibilityFocus = true)
                     }
                 } else {
-                    Log.w(TAG, "⚠️ Unexpected PIN writer '$methodName' skipped; ACTION_SET_TEXT is the only allowed path")
+                    Log.w(TAG, "⚠️ Unexpected PIN writer '$methodName' skipped")
                     continue
                 }
                 val wrote = writer(preferred.node, cleanPin)
@@ -1512,8 +1535,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            // Match the Somtel timing that works reliably (field settles before Send).
-            submitPinOnce(delayMs = CLICK_DELAY_MS, source = "flow-step-${step.order}")
+            // Somnet opens with the PIN prompt; allow its first-dialog input watcher
+            // extra time to commit before Send. Somtel remains on the proven delay.
+            val provider = prefs.getString("current_provider", "").orEmpty()
+            val pinSubmitDelay = if (provider.contains("somnet", ignoreCase = true)) 2400L else CLICK_DELAY_MS
+            submitPinOnce(delayMs = pinSubmitDelay, source = "flow-step-${step.order}")
             return true
         }
 
