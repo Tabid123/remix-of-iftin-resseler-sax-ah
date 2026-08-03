@@ -159,6 +159,7 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val DEBOUNCE_MS = 800L
         private const val CLICK_DELAY_MS = 1400L
         private const val NON_PIN_SUBMIT_DELAY_MS = 1800L
+        private const val MAX_PIN_REWRITE_ATTEMPTS = 2
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
     
@@ -179,6 +180,7 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var lastPinWriteAtMs = 0L
     private var lastPinWriteDiagnostics: PinWriteDiagnostics? = null
     @Volatile private var lastIntendedPinForSession = ""
+    @Volatile private var pinRewriteAttempts = 0
 
     // Track which dynamic flow steps have already been answered in this session
     private val completedFlowSteps = mutableSetOf<Int>()
@@ -316,6 +318,7 @@ class UssdAccessibilityService : AccessibilityService() {
         lastPinWriteAtMs = 0L
         lastPinWriteDiagnostics = null
         lastIntendedPinForSession = ""
+        pinRewriteAttempts = 0
         completedFlowSteps.clear()
         cancelPendingAutoActions("session-reset:$reason")
         setTextSuppressUntilMs = 0L
@@ -361,6 +364,28 @@ class UssdAccessibilityService : AccessibilityService() {
                     Log.w(TAG, "✋ submitPinOnce[$source] aborted at runtime — PIN verification lost")
                     return@Runnable
                 }
+                // LAST-MILE GUARD (same behaviour as the working Somtel path):
+                // re-read the live field right before pressing Send. Some carriers
+                // (Somnet/Jeeb) clear or re-render the input after the first write,
+                // and sending an empty/partial field produces "Invalid PIN format".
+                val expected = lastIntendedPinForSession
+                val live = readActivePinFieldText(rt)
+                if (expected.isNotBlank() && live != expected) {
+                    Log.w(TAG, "🔁 submitPinOnce[$source] field mismatch (live='${live.length} chars' expected len=${expected.length}) — rewriting PIN")
+                    if (pinRewriteAttempts < MAX_PIN_REWRITE_ATTEMPTS) {
+                        pinRewriteAttempts++
+                        pinFilledForSession = false
+                        pinVerifiedForSession = false
+                        pinWriteFailedForSession = false
+                        pinSetCount = 0
+                        if (safeEnterPin(rt, expected)) {
+                            submitPinOnce(delayMs = 1200L, source = "$source-rewrite$pinRewriteAttempts")
+                        }
+                    } else {
+                        Log.e(TAG, "❌ submitPinOnce[$source] giving up after $pinRewriteAttempts rewrites")
+                    }
+                    return@Runnable
+                }
                 pinSubmittedForSession = true
                 submitCount++
                 Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
@@ -372,6 +397,20 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         scheduledSubmitRunnable = r
         handler.postDelayed(r, delayMs)
+    }
+
+    /** Reads the current text of the best editable (PIN) field on screen. */
+    private fun readActivePinFieldText(root: AccessibilityNodeInfo): String {
+        val candidates = collectEditableFieldCandidates(root)
+        try {
+            val best = selectBestEditableCandidate(candidates) ?: return ""
+            return best.node.text?.toString()?.trim().orEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "readActivePinFieldText error: ${e.message}")
+            return ""
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
     }
 
     /**
@@ -1353,6 +1392,24 @@ class UssdAccessibilityService : AccessibilityService() {
         // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
         // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
         val isMenuList = looksLikeNumberedMenu(dialogText)
+        // Carrier rejected the PIN (empty/partial write). Reset PIN session state so
+        // the same PIN step can be re-entered cleanly instead of being skipped.
+        val isInvalidPinPrompt = !isMenuList && (
+            lower.contains("invalid pin") ||
+                lower.contains("pin format") ||
+                lower.contains("wrong pin") ||
+                lower.contains("pin khaldan") ||
+                lower.contains("sirta khaldan")
+        )
+        if (isInvalidPinPrompt) {
+            Log.w(TAG, "🔁 Carrier reported invalid PIN — resetting PIN state for retry")
+            flow.steps.filter { it.isPinField }.forEach { completedFlowSteps.remove(it.order) }
+            pinFilledForSession = false
+            pinVerifiedForSession = false
+            pinSubmittedForSession = false
+            pinWriteFailedForSession = false
+            pinSetCount = 0
+        }
         val looksLikePinDialog = !isMenuList && (
             lower.contains("pin") ||
                 lower.contains("password") ||
@@ -1455,7 +1512,8 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            submitPinOnce(delayMs = 900L, source = "flow-step-${step.order}")
+            // Match the Somtel timing that works reliably (field settles before Send).
+            submitPinOnce(delayMs = CLICK_DELAY_MS, source = "flow-step-${step.order}")
             return true
         }
 
