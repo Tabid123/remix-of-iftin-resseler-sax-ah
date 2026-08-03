@@ -318,6 +318,7 @@ class UssdAccessibilityService : AccessibilityService() {
         lastPinWriteAtMs = 0L
         lastPinWriteDiagnostics = null
         lastIntendedPinForSession = ""
+        pinRewriteAttempts = 0
         completedFlowSteps.clear()
         cancelPendingAutoActions("session-reset:$reason")
         setTextSuppressUntilMs = 0L
