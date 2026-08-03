@@ -54,7 +54,7 @@ object UssdFlowsClient {
             )
         ),
         Flow(
-            id = "00ba757f-cc74-4def-a45b-0f11c7d9730b",
+            id = "3f6a1d2e-9c44-4b81-a5c7-71e0b9d5c2a1",
             triggerCode = "*825#",
             steps = listOf(
                 FlowStep(1, listOf("pin", "furaha", "sirta", "password", "secret", "geli pin", "geli furaha", "pin-kaaga", "enter pin"), "{pin}", true),
