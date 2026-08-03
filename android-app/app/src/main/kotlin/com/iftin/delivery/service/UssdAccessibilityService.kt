@@ -1392,6 +1392,24 @@ class UssdAccessibilityService : AccessibilityService() {
         // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
         // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
         val isMenuList = looksLikeNumberedMenu(dialogText)
+        // Carrier rejected the PIN (empty/partial write). Reset PIN session state so
+        // the same PIN step can be re-entered cleanly instead of being skipped.
+        val isInvalidPinPrompt = !isMenuList && (
+            lower.contains("invalid pin") ||
+                lower.contains("pin format") ||
+                lower.contains("wrong pin") ||
+                lower.contains("pin khaldan") ||
+                lower.contains("sirta khaldan")
+        )
+        if (isInvalidPinPrompt) {
+            Log.w(TAG, "🔁 Carrier reported invalid PIN — resetting PIN state for retry")
+            flow.steps.filter { it.isPinField }.forEach { completedFlowSteps.remove(it.order) }
+            pinFilledForSession = false
+            pinVerifiedForSession = false
+            pinSubmittedForSession = false
+            pinWriteFailedForSession = false
+            pinSetCount = 0
+        }
         val looksLikePinDialog = !isMenuList && (
             lower.contains("pin") ||
                 lower.contains("password") ||
