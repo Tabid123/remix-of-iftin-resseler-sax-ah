@@ -361,6 +361,28 @@ class UssdAccessibilityService : AccessibilityService() {
                     Log.w(TAG, "✋ submitPinOnce[$source] aborted at runtime — PIN verification lost")
                     return@Runnable
                 }
+                // LAST-MILE GUARD (same behaviour as the working Somtel path):
+                // re-read the live field right before pressing Send. Some carriers
+                // (Somnet/Jeeb) clear or re-render the input after the first write,
+                // and sending an empty/partial field produces "Invalid PIN format".
+                val expected = lastIntendedPinForSession
+                val live = readActivePinFieldText(rt)
+                if (expected.isNotBlank() && live != expected) {
+                    Log.w(TAG, "🔁 submitPinOnce[$source] field mismatch (live='${live.length} chars' expected len=${expected.length}) — rewriting PIN")
+                    if (pinRewriteAttempts < MAX_PIN_REWRITE_ATTEMPTS) {
+                        pinRewriteAttempts++
+                        pinFilledForSession = false
+                        pinVerifiedForSession = false
+                        pinWriteFailedForSession = false
+                        pinSetCount = 0
+                        if (safeEnterPin(rt, expected)) {
+                            submitPinOnce(delayMs = 1200L, source = "$source-rewrite$pinRewriteAttempts")
+                        }
+                    } else {
+                        Log.e(TAG, "❌ submitPinOnce[$source] giving up after $pinRewriteAttempts rewrites")
+                    }
+                    return@Runnable
+                }
                 pinSubmittedForSession = true
                 submitCount++
                 Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
@@ -372,6 +394,20 @@ class UssdAccessibilityService : AccessibilityService() {
         }
         scheduledSubmitRunnable = r
         handler.postDelayed(r, delayMs)
+    }
+
+    /** Reads the current text of the best editable (PIN) field on screen. */
+    private fun readActivePinFieldText(root: AccessibilityNodeInfo): String {
+        val candidates = collectEditableFieldCandidates(root)
+        try {
+            val best = selectBestEditableCandidate(candidates) ?: return ""
+            return best.node.text?.toString()?.trim().orEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "readActivePinFieldText error: ${e.message}")
+            return ""
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
     }
 
     /**
