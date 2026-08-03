@@ -484,6 +484,14 @@ class UssdAccessibilityService : AccessibilityService() {
         val hasRealEditableField = candidates.any { it.isVisible && it.isEnabled && it.isEditable }
         val methods = mutableListOf<Pair<String, (AccessibilityNodeInfo, String) -> Boolean>>()
         if (hasRealEditableField) {
+            val provider = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString("current_provider", "")
+                .orEmpty()
+            if (provider.contains("somnet", ignoreCase = true)) {
+                methods += "visible_ime_keypad" to { node: AccessibilityNodeInfo, pin: String ->
+                    writeWithVisibleImeKeypad(node, pin)
+                }
+            }
             // Somnet's first PIN dialog visually accepts ACTION_SET_TEXT but its
             // carrier TextWatcher can still receive an empty value. PASTE fires the
             // same input/commit path as user typing; retain SET_TEXT as fallback.
@@ -493,7 +501,7 @@ class UssdAccessibilityService : AccessibilityService() {
             methods += "action_set_text" to { node: AccessibilityNodeInfo, pin: String ->
                 writeWithActionSetText(node, pin)
             }
-            Log.d(TAG, "🧭 PIN path = PASTE then ACTION_SET_TEXT fallback (EditText present, package=$activePackage)")
+            Log.d(TAG, "🧭 PIN path = ${methods.joinToString(" → ") { it.first }} (EditText present, package=$activePackage)")
         } else {
             pinWriteFailedForSession = true
             Log.w(TAG, "⚠️ safeEnterPin — no real editable field available, refusing gesture/click fallback for PIN entry")
@@ -504,7 +512,7 @@ class UssdAccessibilityService : AccessibilityService() {
         var ok = false
         try {
             for ((methodName, writer) in methods) {
-                if (methodName == "action_set_text" || methodName == "clipboard_paste") {
+                if (methodName == "action_set_text" || methodName == "clipboard_paste" || methodName == "visible_ime_keypad") {
                     val existing = preferred.node.text?.toString().orEmpty()
                     if (existing.isNotEmpty() && existing != cleanPin) {
                         clearEditableField(preferred.node)
@@ -660,10 +668,14 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun focusEditableField(node: AccessibilityNodeInfo, requireAccessibilityFocus: Boolean = false): Boolean {
+        // Samsung USSD/STK fields may report focus without opening a real input
+        // connection. Click the field first, just like a user, before typing.
+        val clickResult = try { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
         val focusResult = if (node.isFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val a11yResult = if (!requireAccessibilityFocus) node.isAccessibilityFocused else if (node.isAccessibilityFocused) true else node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        Log.d(TAG, "🎯 focusEditableField focus=$focusResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus click=disabled")
-        return focusResult || a11yResult
+        if (clickResult) try { SystemClock.sleep(180L) } catch (_: Exception) {}
+        Log.d(TAG, "🎯 focusEditableField click=$clickResult focus=$focusResult a11y=$a11yResult requireA11y=$requireAccessibilityFocus")
+        return clickResult || focusResult || a11yResult
     }
 
     private fun writeWithActionSetText(node: AccessibilityNodeInfo, pin: String): Boolean {
@@ -781,6 +793,30 @@ class UssdAccessibilityService : AccessibilityService() {
             SystemClock.sleep(settleDelay)
         }
         return dispatched
+    }
+
+    /**
+     * Type through the visible Android numeric keyboard. Somnet's first PIN dialog
+     * can ignore SET_TEXT/PASTE even when Accessibility reports success; real IME
+     * taps use the same input path as manual typing.
+     */
+    private fun writeWithVisibleImeKeypad(node: AccessibilityNodeInfo, pin: String): Boolean {
+        clearEditableField(node)
+        focusEditableField(node, requireAccessibilityFocus = true)
+        try { SystemClock.sleep(350L) } catch (_: Exception) {}
+
+        val imeRoots = windows
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            .mapNotNull { window -> try { window.root } catch (_: Exception) { null } }
+        if (imeRoots.isEmpty()) {
+            Log.w(TAG, "🎹 Somnet IME keypad not visible after clicking PIN field")
+            return false
+        }
+        return try {
+            imeRoots.any { imeRoot -> dispatchGestureKeypad(imeRoot, pin) }
+        } finally {
+            imeRoots.forEach { try { it.recycle() } catch (_: Exception) {} }
+        }
     }
 
     private fun writeWithClipboardPaste(node: AccessibilityNodeInfo, pin: String, requireFocus: Boolean): Boolean {
@@ -1793,6 +1829,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
         if (shouldHardStopForPinStage(root, dialogText)) {
+            return true
+        }
+
+        // Fail closed when this screen is a configured PIN step. A carrier may hide
+        // its EditText from Accessibility, so "no candidate found" must never mean
+        // that the generic Send/OK clicker is allowed to submit an empty PIN.
+        if (matchesConfiguredPinFlowStep(dialogText) &&
+            (!pinFilledForSession || !pinVerifiedForSession || pinWriteFailedForSession)
+        ) {
+            Log.i(TAG, "🛑 Suppressing auto-click — configured PIN step is not safely committed")
             return true
         }
 
