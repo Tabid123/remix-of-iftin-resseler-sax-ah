@@ -691,13 +691,25 @@ const AdminDashboard = () => {
     const { error } = await supabase.from('providers_config').delete().eq('id', id);
     if (error) {
       const isFk = (error as any).code === '23503' || /foreign key|violates/i.test(error.message || '');
-      toast({
-        title: 'Lama tirtiri karo',
-        description: isFk
-          ? 'Shirkaddan waxay leedahay dalabyo (orders) hore loo diray, sidaa darteed lama tirtiri karo. Halkii, ka dhig "Inactive".'
-          : error.message,
-        variant: 'destructive',
-      });
+      if (!isFk) {
+        toast({ title: 'Lama tirtiri karo', description: error.message, variant: 'destructive' });
+        return;
+      }
+      const ok = confirm('Shirkaddan waxay leedahay dalabyo (orders) iyo xog kale hore loo diray.\n\nMa rabtaa in LA WADA TIRTIRO (orders, packages, tiers, flows)? Tallaabadan dib looma celin karo!');
+      if (!ok) return;
+      const { data: res, error: rpcErr } = await supabase.rpc('force_delete_provider' as any, { p_provider_id: id });
+      if (rpcErr || !(res as any)?.ok) {
+        toast({
+          title: 'Lama tirtirin',
+          description: (res as any)?.error === 'not_admin'
+            ? 'Ma haysatid ogolaansho admin ah.'
+            : (rpcErr?.message || 'Khalad ayaa dhacay'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      setProviders(prev => prev.filter(p => p.id !== id));
+      toast({ title: 'Guul', description: 'Shirkadda iyo xogteeda oo dhan waa la tirtiray' });
       return;
     }
     // Xaqiiji in dhab ahaan la tirtiray (RLS way iska aamusi kartaa)
