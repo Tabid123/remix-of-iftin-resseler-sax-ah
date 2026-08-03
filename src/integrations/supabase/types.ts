@@ -1922,6 +1922,7 @@ export type Database = {
         }
         Returns: Json
       }
+      force_delete_provider: { Args: { p_provider_id: string }; Returns: Json }
       generate_daily_outreach_targets: {
         Args: { p_admin_id?: string }
         Returns: {
