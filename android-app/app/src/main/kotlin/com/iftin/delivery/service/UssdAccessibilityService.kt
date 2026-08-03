@@ -1512,7 +1512,8 @@ class UssdAccessibilityService : AccessibilityService() {
                 dialogText = dialogText.take(200),
                 isPin = true
             )
-            submitPinOnce(delayMs = 900L, source = "flow-step-${step.order}")
+            // Match the Somtel timing that works reliably (field settles before Send).
+            submitPinOnce(delayMs = CLICK_DELAY_MS, source = "flow-step-${step.order}")
             return true
         }
 
