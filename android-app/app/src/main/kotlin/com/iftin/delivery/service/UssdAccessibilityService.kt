@@ -159,6 +159,7 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val DEBOUNCE_MS = 800L
         private const val CLICK_DELAY_MS = 1400L
         private const val NON_PIN_SUBMIT_DELAY_MS = 1800L
+        private const val MAX_PIN_REWRITE_ATTEMPTS = 2
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
     
