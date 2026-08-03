@@ -179,6 +179,7 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var lastPinWriteAtMs = 0L
     private var lastPinWriteDiagnostics: PinWriteDiagnostics? = null
     @Volatile private var lastIntendedPinForSession = ""
+    @Volatile private var pinRewriteAttempts = 0
 
     // Track which dynamic flow steps have already been answered in this session
     private val completedFlowSteps = mutableSetOf<Int>()
