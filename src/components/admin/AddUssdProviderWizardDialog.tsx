@@ -149,18 +149,28 @@ export default function AddUssdProviderWizardDialog({ open, onOpenChange, onCrea
       if (e2) throw e2;
 
       // 3) create provider linked to this flow
-      const { error: e3 } = await supabase.from('providers_config').insert([{
+      const { data: prov, error: e3 } = await supabase.from('providers_config').insert([{
         provider_name: providerName,
         provider_logo: providerLogo || null,
         display_order: displayOrder,
         evoucher_rate: evoucherRate,
-        sim_password: simPassword,
         ussd_method: 'interactive',
         ussd_flow_id: flowId,
         is_active: true,
         promotional_text: 'Iftin ka iibso Internet adigoona qof wicin, waqti kasta, xitaa offline!',
-      }] as any);
+      }] as any).select('id').single();
       if (e3) throw e3;
+
+      // 4) store SIM PIN in delivery_instructions (providers_config has no PIN column)
+      if (simPassword.trim() && (prov as any)?.id) {
+        const { error: e4 } = await supabase.from('delivery_instructions').insert([{
+          provider_id: (prov as any).id,
+          instruction_template: '',
+          sim_password: simPassword.trim(),
+          ussd_method: 'interactive',
+        }] as any);
+        if (e4) throw e4;
+      }
 
       toast.success('Shirkada USSD si guul leh ayaa loo daray!');
       onCreated?.();
