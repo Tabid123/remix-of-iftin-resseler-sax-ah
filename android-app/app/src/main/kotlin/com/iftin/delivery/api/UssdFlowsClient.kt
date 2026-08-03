@@ -57,12 +57,12 @@ object UssdFlowsClient {
             id = "00ba757f-cc74-4def-a45b-0f11c7d9730b",
             triggerCode = "*825#",
             steps = listOf(
-                FlowStep(1, listOf("dirid", "dirid lacag", "lacag", "lacagta", "amount", "send money", "send", "qiime", "qiimo"), "2", false),
-                FlowStep(2, listOf("geli mobile", "mobile", "mobilka", "mobile-ka", "lambarka", "taleefan", "number"), "{receiver}", false),
-                FlowStep(3, listOf("hubi", "hubi mobil", "confirm", "xaqiiji", "lambarka", "number"), "{receiver}", false),
-                FlowStep(4, listOf("geli lacagta", "lacagta", "amount", "qiimaha", "enter amount"), "{amount}", false),
-                FlowStep(5, listOf("ma hubtaa", "haa", "confirm", "xaqiiji", "yes"), "1", false),
-                FlowStep(6, listOf("pin", "furaha", "sirta", "password", "secret", "geli pin", "pin-kaaga"), "{pin}", true)
+                FlowStep(1, listOf("pin", "furaha", "sirta", "password", "secret", "geli pin", "geli furaha", "pin-kaaga", "enter pin"), "{pin}", true),
+                FlowStep(2, listOf("dirid", "dirid lacag", "lacag", "lacagta", "amount", "send money", "send", "qiime", "qiimo"), "2", false),
+                FlowStep(3, listOf("geli mobile", "mobile", "mobilka", "mobile-ka", "lambarka", "taleefan", "number"), "{receiver}", false),
+                FlowStep(4, listOf("hubi", "hubi mobil", "confirm", "xaqiiji", "lambarka", "number"), "{receiver}", false),
+                FlowStep(5, listOf("geli lacagta", "lacagta", "amount", "qiimaha", "enter amount"), "{amount}", false),
+                FlowStep(6, listOf("ma hubtaa", "haa", "confirm", "xaqiiji", "yes"), "1", false)
             )
         )
     )
