@@ -178,8 +178,10 @@ class UssdAccessibilityService : AccessibilityService() {
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
         private const val DEBOUNCE_MS = 800L
-        private const val CLICK_DELAY_MS = 1800L
-        private const val NON_PIN_SUBMIT_DELAY_MS = 2600L
+        private const val CLICK_DELAY_MS = 2200L
+        private const val NON_PIN_SUBMIT_DELAY_MS = 3200L
+        // Extra wait applied when a scheduled Send finds the input field still empty.
+        private const val SUBMIT_RECHECK_DELAY_MS = 1500L
 
         /** Resource-id fragments that identify the dialer keypad (NOT a USSD dialog). */
         private val DIALPAD_ID_MARKERS = listOf(
@@ -448,6 +450,11 @@ class UssdAccessibilityService : AccessibilityService() {
 
     /** Password EditTexts may expose bullets instead of the real digits. */
     private fun isPinCommittedInActiveField(root: AccessibilityNodeInfo, expected: String): Boolean {
+        return isValueCommittedInActiveField(root, expected)
+    }
+
+    /** True when the active EditText really holds [expected] (or its masked form). */
+    private fun isValueCommittedInActiveField(root: AccessibilityNodeInfo, expected: String): Boolean {
         if (expected.isBlank()) return false
         val candidates = collectEditableFieldCandidates(root)
         return try {
