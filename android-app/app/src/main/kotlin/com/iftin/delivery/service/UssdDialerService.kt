@@ -1370,6 +1370,7 @@ class UssdDialerService : Service() {
                 .edit()
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                 .apply()
             
             // 500ms settle time before USSD
@@ -1392,7 +1393,15 @@ class UssdDialerService : Service() {
 
             // Dial USSD code
             val orderProvider = order.provider.ifEmpty { provider }
-            val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot)
+            // Silent USSD is only valid for single-step providers (e.g. Hormuud *726*...#).
+            // Anything with an interactive flow must open the real dialer so the
+            // AccessibilityService can walk the menu / type the PIN.
+            val hasInteractiveFlow = (order.ussdMethod ?: "").equals("interactive", ignoreCase = true) ||
+                !order.ussdFlowId.isNullOrBlank() ||
+                UssdFlowsClient.findFlowForTrigger(triggerCode) != null
+            val allowSilent = !hasInteractiveFlow
+            android.util.Log.d("UssdDialer", "🧭 Dial mode: ${if (allowSilent) "SILENT (single-step)" else "DIALOG (interactive)"} trigger=$triggerCode method=${order.ussdMethod}")
+            val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot, allowSilent)
             
             if (dialSuccess) {
                 // Get the captured USSD response from AccessibilityService
@@ -1622,6 +1631,7 @@ class UssdDialerService : Service() {
                     prefs.edit()
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                        .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                         .apply()
 
                     // Attach PIN diagnostic snapshot if carrier rejected PIN — surfaces
@@ -1721,7 +1731,8 @@ class UssdDialerService : Service() {
         receiverPhone: String,
         packageCode: String?,
         provider: String,
-        simSlot: Int? = null
+        simSlot: Int? = null,
+        allowSilent: Boolean = true
     ): Boolean {
         try {
             val finalUssd = ussdCode.trim()
@@ -1730,6 +1741,7 @@ class UssdDialerService : Service() {
             android.util.Log.d("UssdDialer", "Provider: $provider")
             android.util.Log.d("UssdDialer", "Final USSD: $finalUssd")
             android.util.Log.d("UssdDialer", "Database simSlot: $simSlot")
+            android.util.Log.d("UssdDialer", "Allow silent USSD: $allowSilent")
 
             // Check permissions
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED ||
@@ -1747,8 +1759,11 @@ class UssdDialerService : Service() {
             
             android.util.Log.d("UssdDialer", "🎯 Using subscriptionId: $subscriptionId")
             
-            // 🔇 TRY SILENT USSD FIRST (Android 8.0+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 🔇 TRY SILENT USSD FIRST (Android 8.0+) — ONLY for single-step providers.
+            // Interactive flows (Somtel *300#, Somnet *825#) MUST use the visible dialer:
+            // sendUssdRequest() closes the session after the first network reply, so the
+            // carrier never receives the PIN/receiver/amount → "Invalid PIN format".
+            if (allowSilent && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 android.util.Log.d("UssdDialer", "🔇 Trying SILENT USSD via TelephonyManager...")
                 
                 val silentSuccess = trySilentUssd(finalUssd, subscriptionId)
@@ -1758,6 +1773,8 @@ class UssdDialerService : Service() {
                 }
                 
                 android.util.Log.d("UssdDialer", "⚠️ Silent USSD failed, trying Intent fallback...")
+            } else if (!allowSilent) {
+                android.util.Log.d("UssdDialer", "🎛️ Interactive flow → skipping silent USSD, using visible dialer")
             }
             
             // FALLBACK: Use Intent.ACTION_CALL (shows dialer)
@@ -1825,13 +1842,15 @@ class UssdDialerService : Service() {
                     android.os.Handler(android.os.Looper.getMainLooper())
                 )
                 
-                // Timeout after 10 seconds
+                // Timeout after 20 seconds — Hormuud's network reply for
+                // *726*...# regularly takes 12-15s, and a premature timeout used to
+                // drop us into the visible dialer (the "not silent" complaint).
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (continuation.isActive) {
-                        android.util.Log.w("UssdDialer", "⏱️ Silent USSD timeout (10s)")
+                        android.util.Log.w("UssdDialer", "⏱️ Silent USSD timeout (20s)")
                         continuation.resume(false)
                     }
-                }, 10000)
+                }, 20000)
                 
             } catch (e: SecurityException) {
                 android.util.Log.e("UssdDialer", "🔒 Silent USSD permission denied: ${e.message}")
@@ -1848,6 +1867,9 @@ class UssdDialerService : Service() {
         prefs.edit()
             .putString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, response)
             .putLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
+            // Mark it as an authoritative carrier reply so the AccessibilityService
+            // never overwrites it with whatever window happens to be on screen.
+            .putLong(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT, System.currentTimeMillis())
             .apply()
     }
     

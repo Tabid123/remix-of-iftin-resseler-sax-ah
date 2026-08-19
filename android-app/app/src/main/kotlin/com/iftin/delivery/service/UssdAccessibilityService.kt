@@ -88,6 +88,8 @@ class UssdAccessibilityService : AccessibilityService() {
         const val KEY_LAST_USSD_TIME = "last_ussd_time"
         const val KEY_LAST_USSD_RESPONSE = "last_ussd_response"
         const val KEY_LAST_USSD_RESPONSE_TIME = "last_ussd_response_time"
+        /** Set by UssdDialerService when a SILENT (TelephonyManager) reply was received. */
+        const val KEY_SILENT_RESPONSE_AT = "silent_ussd_response_at"
         const val KEY_USSD_SESSION_ID = "ussd_session_id"  // Session ID to bind responses
         // In-app diagnostics for PIN entry (visible without adb logcat)
         const val KEY_LAST_PIN_DEBUG = "last_pin_debug_snapshot"
@@ -153,6 +155,25 @@ class UssdAccessibilityService : AccessibilityService() {
             "com.coloros.phone",
             "com.realme.phone"
         )
+
+        /** Text fragments that prove we are reading the launcher, not a USSD dialog. */
+        private val LAUNCHER_MARKERS = listOf(
+            "double tap and drag", "home screen", "play store", "google search",
+            "google app", "voice search", "apps list", "page 1 of", "page 2 of",
+            "current page is", "notification shade", "quick settings", "widget"
+        )
+
+        fun isPhoneLikePackage(pkg: String): Boolean {
+            val p = pkg.lowercase()
+            // NOTE: launchers must never match here.
+            if (p.contains("launcher") || p.contains("home")) return false
+            return p.contains("phone") || p.contains("dialer") || p.contains("stk") ||
+                p.contains("toolkit") || p.contains("telecom") || p.contains("incall") ||
+                p.contains("ussd") || p.contains("call")
+        }
+
+        fun isUssdRelatedPackage(pkg: String): Boolean =
+            USSD_PACKAGES.any { pkg.contains(it, ignoreCase = true) } || isPhoneLikePackage(pkg)
         
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
@@ -1206,14 +1227,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
         // Check if event is from a phone/dialer-related app
         val isUssdPackage = USSD_PACKAGES.any { packageName.contains(it, ignoreCase = true) }
-        val isPhonePackage = packageName.contains("phone", ignoreCase = true) ||
-                            packageName.contains("dialer", ignoreCase = true) ||
-                            packageName.contains("stk", ignoreCase = true) ||
-                            packageName.contains("toolkit", ignoreCase = true) ||
-                            packageName.contains("telecom", ignoreCase = true) ||
-                            packageName.contains("incall", ignoreCase = true) ||
-                            packageName.contains("ussd", ignoreCase = true) ||
-                            packageName.contains("call", ignoreCase = true)
+        val isPhonePackage = isPhoneLikePackage(packageName)
 
         if (!expectingUssd) {
             ussdSessionToken = 0L
@@ -1308,6 +1322,16 @@ class UssdAccessibilityService : AccessibilityService() {
             val source = rootInActiveWindow ?: try { event.source } catch (_: Exception) { null } ?: return
             if (!source.refresh()) {
                 Log.d(TAG, "⚠️ source.refresh() returned false — node may be stale")
+            }
+
+            // The dialog may already be gone by the time this delayed runnable fires.
+            // If the active window now belongs to the launcher (or any non-phone app),
+            // do NOT read it — otherwise we capture the home screen as the USSD reply.
+            val activePkg = source.packageName?.toString().orEmpty()
+            if (activePkg.isNotBlank() && !isUssdRelatedPackage(activePkg)) {
+                Log.d(TAG, "🚪 Active window is '$activePkg' (not a USSD/phone app) — skipping capture")
+                source.recycle()
+                return
             }
             
             // CAPTURE ALL DIALOG TEXT FIRST - before any filtering
@@ -1739,7 +1763,24 @@ class UssdAccessibilityService : AccessibilityService() {
      */
     private fun saveUssdResponse(text: String) {
         try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+            // 1) A silent (TelephonyManager) carrier reply is authoritative — never
+            //    overwrite it with on-screen text.
+            val silentAt = prefs.getLong(KEY_SILENT_RESPONSE_AT, 0L)
+            if (silentAt > 0L && System.currentTimeMillis() - silentAt < 120_000L) {
+                Log.d(TAG, "🔇 Silent USSD reply already stored — skipping screen capture")
+                return
+            }
+
+            // 2) Reject anything that is clearly NOT a USSD dialog (launcher / home
+            //    screen text captured after the dialog was dismissed).
+            if (!looksLikeUssdResponse(text)) {
+                Log.w(TAG, "🚮 Ignoring non-USSD screen text: ${text.take(80)}")
+                return
+            }
+
+            prefs
                 .edit()
                 .putString(KEY_LAST_USSD_RESPONSE, text)
                 .putLong(KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
@@ -1749,6 +1790,20 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.e(TAG, "❌ Failed to save USSD response: ${e.message}")
         }
     }
+
+    /**
+     * Heuristic guard: the delayed runnables read `rootInActiveWindow`, which can be the
+     * launcher/home screen once the USSD dialog is dismissed. Storing that as the carrier
+     * reply produced garbage delivery notes ("Google Search | Play Store | Camera ...").
+     */
+    private fun looksLikeUssdResponse(text: String): Boolean {
+        val t = text.lowercase()
+        return !LAUNCHER_MARKERS.any { t.contains(it) } && run {
+            val parts = text.split(" | ").filter { it.isNotBlank() }
+            !(parts.size >= 12 && parts.none { it.length > 30 })
+        } && text.trim().length >= 3
+    }
+
     
     /**
      * Start listening for additional dialogs for 10 seconds
