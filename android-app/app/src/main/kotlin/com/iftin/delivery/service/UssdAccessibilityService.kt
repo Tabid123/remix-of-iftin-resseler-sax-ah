@@ -2329,10 +2329,20 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
+    private fun shouldSuppressAutoClickForDialog(
+        root: AccessibilityNodeInfo,
+        dialogText: String?,
+        committedValue: String? = null
+    ): Boolean {
         if (shouldHardStopForPinStage(root, dialogText)) {
             return true
         }
+
+        // If the flow already verified that its exact value sits in the dialog input,
+        // every "empty input" guard below is irrelevant — let Send through.
+        val valueAlreadyCommitted = !committedValue.isNullOrBlank() &&
+            isValueCommittedInActiveField(root, committedValue)
+        if (valueAlreadyCommitted) return false
 
         // Never press Send on a "1. Haa / 2. Maya" style prompt before the choice
         // has actually been entered/selected.
@@ -2426,7 +2436,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "🛑 Send blocked — required value is not committed in the live input field")
                 return
             }
-            if (shouldSuppressAutoClickForDialog(root, dialogText)) {
+            if (shouldSuppressAutoClickForDialog(root, dialogText, requiredCommittedValue)) {
                 Log.i(TAG, "✋ clickSendOrOkButton suppressed — editable dialog awaiting manual action")
                 return
             }
