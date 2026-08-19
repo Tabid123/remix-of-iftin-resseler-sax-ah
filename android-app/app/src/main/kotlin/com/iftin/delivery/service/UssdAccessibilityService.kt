@@ -88,6 +88,9 @@ class UssdAccessibilityService : AccessibilityService() {
         const val KEY_LAST_USSD_TIME = "last_ussd_time"
         const val KEY_LAST_USSD_RESPONSE = "last_ussd_response"
         const val KEY_LAST_USSD_RESPONSE_TIME = "last_ussd_response_time"
+        /** Text of the LAST dialog of the session (no input field, only OK) — authoritative result. */
+        const val KEY_FINAL_USSD_RESPONSE = "final_ussd_response"
+        const val KEY_FINAL_USSD_RESPONSE_TIME = "final_ussd_response_time"
         /** Set by UssdDialerService when a SILENT (TelephonyManager) reply was received. */
         const val KEY_SILENT_RESPONSE_AT = "silent_ussd_response_at"
         const val KEY_USSD_SESSION_ID = "ussd_session_id"  // Session ID to bind responses
