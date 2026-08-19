@@ -1216,8 +1216,6 @@ class UssdAccessibilityService : AccessibilityService() {
         } ?: return false
 
         val lower = dialogText.lowercase()
-        val isYesNoConfirmation =
-            (lower.contains("haa") && lower.contains("maya")) || lower.contains("ma hubtaa") || lower.contains("mu hubtaa")
         val pendingStep = flow.steps.firstOrNull { step ->
             step.order !in completedFlowSteps &&
                 step.keywords.isNotEmpty() &&
@@ -1634,6 +1632,8 @@ class UssdAccessibilityService : AccessibilityService() {
         // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
         // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
         val isMenuList = looksLikeNumberedMenu(dialogText)
+        val isYesNoConfirmation =
+            (lower.contains("haa") && lower.contains("maya")) || lower.contains("ma hubtaa") || lower.contains("mu hubtaa")
         // Carrier rejected the PIN (empty/partial write). Reset PIN session state so
         // the same PIN step can be re-entered cleanly instead of being skipped.
         val isInvalidPinPrompt = !isMenuList && (
