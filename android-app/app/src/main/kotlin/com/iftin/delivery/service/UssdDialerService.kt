@@ -1428,6 +1428,15 @@ class UssdDialerService : Service() {
                 
                 if (ussdResponse != null && ussdResponse.isNotBlank()) {
                     val responseText = ussdResponse.lowercase()
+
+                    // ===== MMI / connection-problem: the request DID leave the phone =====
+                    // Hormuud (single-step) often answers "Connection problem or invalid
+                    // MMI code" even though the top-up was accepted; the real result
+                    // arrives by SMS. Never retry these — that double-sends money.
+                    val mmiNotice = listOf(
+                        "invalid mmi", "mmi code", "connection problem",
+                        "connection filed", "connection failed"
+                    ).any { responseText.contains(it) }
                     
                     // Check for provider SUCCESS keywords first
                     val providerSuccess = listOf(
@@ -1444,7 +1453,11 @@ class UssdDialerService : Service() {
                         "declined", "rejected", "time out", "network error"
                     ).any { responseText.contains(it) }
                     
-                    if (providerSuccess) {
+                    if (mmiNotice && !providerSuccess) {
+                        finalStatus = "completed"
+                        finalResponse = "$ussdResponse\n\n(USSD dispatched — awaiting provider SMS confirmation. Not retried.)"
+                        android.util.Log.w("UssdDialer", "📨 MMI/connection notice — treating as dispatched, awaiting SMS")
+                    } else if (providerSuccess) {
                         finalStatus = "completed"
                         finalResponse = ussdResponse
                         android.util.Log.d("UssdDialer", "✅ Provider SUCCESS detected: ${ussdResponse.take(100)}")
@@ -1459,10 +1472,17 @@ class UssdDialerService : Service() {
                         android.util.Log.d("UssdDialer", "📝 Unknown USSD response, assuming OK: ${ussdResponse.take(100)}")
                     }
                 } else {
-                    // No response captured - report as timeout, NOT success
-                    finalStatus = "timeout"
-                    finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
-                    android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
+                    if (isSingleStep) {
+                        // Single-step top-ups are fire-and-confirm-by-SMS. Retrying them
+                        // risks a duplicate transfer, so mark dispatched instead.
+                        finalStatus = "completed"
+                        finalResponse = "USSD dispatched (single-step). No on-screen response — awaiting provider SMS confirmation."
+                        android.util.Log.w("UssdDialer", "📨 No response for single-step order — marked dispatched, awaiting SMS")
+                    } else {
+                        finalStatus = "timeout"
+                        finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
+                        android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
+                    }
                 }
                 
                 val statusUpdated = updateDeliveryStatusWithRetry(
