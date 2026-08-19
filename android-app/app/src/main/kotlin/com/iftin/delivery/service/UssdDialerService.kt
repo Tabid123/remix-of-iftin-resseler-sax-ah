@@ -1392,7 +1392,15 @@ class UssdDialerService : Service() {
 
             // Dial USSD code
             val orderProvider = order.provider.ifEmpty { provider }
-            val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot)
+            // Silent USSD is only valid for single-step providers (e.g. Hormuud *726*...#).
+            // Anything with an interactive flow must open the real dialer so the
+            // AccessibilityService can walk the menu / type the PIN.
+            val hasInteractiveFlow = (order.ussdMethod ?: "").equals("interactive", ignoreCase = true) ||
+                !order.ussdFlowId.isNullOrBlank() ||
+                UssdFlowsClient.findFlowForTrigger(triggerCode) != null
+            val allowSilent = !hasInteractiveFlow
+            android.util.Log.d("UssdDialer", "🧭 Dial mode: ${if (allowSilent) "SILENT (single-step)" else "DIALOG (interactive)"} trigger=$triggerCode method=${order.ussdMethod}")
+            val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot, allowSilent)
             
             if (dialSuccess) {
                 // Get the captured USSD response from AccessibilityService
