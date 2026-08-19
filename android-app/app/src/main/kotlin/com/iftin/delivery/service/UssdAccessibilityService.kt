@@ -494,6 +494,28 @@ class UssdAccessibilityService : AccessibilityService() {
         return screenShowsValue(root, expected)
     }
 
+    /**
+     * Strict check for numbered confirmation prompts. The prompt itself contains
+     * "1. Haa", so the generic screenShowsValue fallback would incorrectly treat
+     * that menu label as typed input. Only a real editable field counts here.
+     */
+    private fun isValueCommittedInEditableField(root: AccessibilityNodeInfo, expected: String): Boolean {
+        if (expected.isBlank()) return false
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            candidates.any { candidate ->
+                if (!candidate.isVisible || !candidate.isEnabled || !candidate.isEditable) {
+                    false
+                } else {
+                    try { candidate.node.refresh() } catch (_: Exception) {}
+                    candidate.node.text?.toString()?.trim() == expected
+                }
+            }
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
+    }
+
     /** True when the carrier dialog exposes at least one visible input containing data. */
     private fun hasEnteredInputValue(root: AccessibilityNodeInfo): Boolean {
         val candidates = collectEditableFieldCandidates(root)
@@ -1194,6 +1216,8 @@ class UssdAccessibilityService : AccessibilityService() {
         } ?: return false
 
         val lower = dialogText.lowercase()
+        val isYesNoConfirmation =
+            (lower.contains("haa") && lower.contains("maya")) || lower.contains("ma hubtaa") || lower.contains("mu hubtaa")
         val pendingStep = flow.steps.firstOrNull { step ->
             step.order !in completedFlowSteps &&
                 step.keywords.isNotEmpty() &&
@@ -1633,7 +1657,14 @@ class UssdAccessibilityService : AccessibilityService() {
                 lower.contains("password") ||
                 lower.contains("furaha")
         )
-        val matchedStep = flow.steps.firstOrNull { s ->
+        val matchedStep = if (isYesNoConfirmation) {
+            // The final Somnet screen must always answer 1 (Haa). Prefer the
+            // configured pending confirmation step even if carrier wording varies.
+            flow.steps.firstOrNull { s ->
+                s.order !in completedFlowSteps && !s.isPinField &&
+                    s.responseTemplate.trim().trim('{', '}') == "1"
+            }
+        } else null ?: flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
@@ -1842,7 +1873,14 @@ class UssdAccessibilityService : AccessibilityService() {
                     Log.i(TAG, "🛑 Skipping stale Send — carrier dialog changed before step ${step.order} submit")
                     return@Runnable
                 }
-                if (!isValueCommittedInActiveField(rt, response)) {
+                // On "1. Haa / 2. Maya", never accept the visible menu label "1"
+                // as proof that input was entered. Require the editable field itself.
+                val committed = if (isYesNoConfirmation) {
+                    isValueCommittedInEditableField(rt, response)
+                } else {
+                    isValueCommittedInActiveField(rt, response)
+                }
+                if (!committed) {
                     submitAttempt++
                     if (submitAttempt <= 3) {
                         Log.w(TAG, "⏳ Field not committed yet (attempt $submitAttempt) — retyping '$response' and waiting")
