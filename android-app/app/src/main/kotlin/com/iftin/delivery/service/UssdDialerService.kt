@@ -1863,6 +1863,9 @@ class UssdDialerService : Service() {
         prefs.edit()
             .putString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, response)
             .putLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
+            // Mark it as an authoritative carrier reply so the AccessibilityService
+            // never overwrites it with whatever window happens to be on screen.
+            .putLong(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT, System.currentTimeMillis())
             .apply()
     }
     
