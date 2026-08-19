@@ -1730,6 +1730,13 @@ class UssdDialerService : Service() {
                 val useFinal = !finalDialog.isNullOrBlank() && System.currentTimeMillis() - finalTime < 30000
                 val response = if (useFinal) finalDialog
                     else prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                // An intermediate input dialog ("Fadlan Geli Mobile-ka | Cancel | Send")
+                // is NOT a result. Keep polling for the real OK-only carrier reply and
+                // only give up near the end of the window.
+                if (!useFinal && isIntermediateDialogText(response) && attempt < maxAttempts - 3) {
+                    delay(600)
+                    return@repeat
+                }
                 if (isJunkUssdText(response)) {
                     // "USSD code running…" toasts / launcher noise are NOT results.
                     prefs.edit()
