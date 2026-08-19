@@ -61,6 +61,10 @@ class SmsReceiver : BroadcastReceiver() {
                     
                     Log.d(TAG, "SMS received from: $senderPhone")
                     Log.d(TAG, "SMS body: $messageBody")
+
+                    // Keep a short local log so a delivery can fall back to the
+                    // carrier SMS when the USSD dialog result was not captured.
+                    logSmsLocally(context, messageBody)
                     Log.d(TAG, "Generated tx_id (timestamp-based): $uniqueTxId")
                     
                     // Get which SIM received this SMS
