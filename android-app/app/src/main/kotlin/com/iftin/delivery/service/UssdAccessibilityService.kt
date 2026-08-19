@@ -1384,7 +1384,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 val dismissed = clickTerminalDismissButton(source)
                 Log.i(TAG, "🏁 Terminal USSD result dialog handled (dismissed=$dismissed)")
-                resetSessionState("terminal_result_dialog")
+                if (dismissed) {
+                    resetSessionState("terminal_result_dialog")
+                } else {
+                    retryTerminalDismiss(attempt = 1)
+                }
                 source.recycle()
                 return
             }
@@ -1999,6 +2003,32 @@ class UssdAccessibilityService : AccessibilityService() {
         return false
     }
 
+    /** Retry OK dismissal against a fresh node tree; carrier result dialogs often
+     * replace their button node shortly after appearing, making the first node stale. */
+    private fun retryTerminalDismiss(attempt: Int) {
+        if (attempt > 4) {
+            Log.e(TAG, "❌ Terminal result saved, but OK could not be dismissed after retries")
+            return
+        }
+        handler.postDelayed({
+            val freshRoot = rootInActiveWindow ?: return@postDelayed
+            try {
+                if (!isRealUssdDialog(freshRoot)) return@postDelayed
+                val freshText = extractDialogText(freshRoot)
+                if (!isTerminalResultDialog(freshRoot, freshText)) return@postDelayed
+                if (!freshText.isNullOrBlank()) saveUssdResponse(freshText, isFinal = true)
+                if (clickTerminalDismissButton(freshRoot)) {
+                    Log.i(TAG, "✅ Terminal OK dismissed on retry $attempt")
+                    resetSessionState("terminal_result_retry_$attempt")
+                } else {
+                    retryTerminalDismiss(attempt + 1)
+                }
+            } finally {
+                try { freshRoot.recycle() } catch (_: Exception) {}
+            }
+        }, 700L * attempt)
+    }
+
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
         // (see clickTerminalDismissButton below for terminal dialog handling)
         try {
@@ -2362,7 +2392,10 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun isSubmitButtonLabel(label: String): Boolean {
         val normalized = label.trim().lowercase()
-        return normalized in setOf("send", "dir", "soo dir", "submit", "confirm", "yes", "haa")
+        return normalized in setOf(
+            "send", "dir", "soo dir", "submit", "confirm", "yes", "haa",
+            "cancel", "next", "continue", "accept", "agree", "ogolow", "sii wad"
+        )
     }
 
     private fun dialogFingerprintFor(text: String?): String = text.orEmpty()
