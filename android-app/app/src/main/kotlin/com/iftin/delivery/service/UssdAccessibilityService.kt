@@ -633,7 +633,17 @@ class UssdAccessibilityService : AccessibilityService() {
         fun walk(node: AccessibilityNodeInfo) {
             try {
                 val className = node.className?.toString().orEmpty()
-                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable
+                // Some Samsung/carrier USSD widgets expose a generic View instead
+                // of EditText, but still advertise ACTION_SET_TEXT/ACTION_PASTE.
+                // Treat those as real inputs so an input dialog can never be
+                // mistaken for an OK-only terminal result.
+                val supportsTextAction = try {
+                    node.actionList.any {
+                        it.id == AccessibilityNodeInfo.ACTION_SET_TEXT ||
+                            it.id == AccessibilityNodeInfo.ACTION_PASTE
+                    }
+                } catch (_: Exception) { false }
+                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable || supportsTextAction
                 if (isEditableNode) {
                     val bounds = Rect().also { node.getBoundsInScreen(it) }
                     val visible = node.isVisibleToUser && bounds.width() > 0 && bounds.height() > 0 && Rect.intersects(bounds, screenBounds)
@@ -646,7 +656,7 @@ class UssdAccessibilityService : AccessibilityService() {
                                 bounds = bounds,
                                 isFocused = node.isFocused,
                                 isAccessibilityFocused = node.isAccessibilityFocused,
-                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true),
+                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true) || supportsTextAction,
                                 isEnabled = node.isEnabled,
                                 isVisible = visible,
                                 existingTextLength = node.text?.length ?: 0,
@@ -2140,8 +2150,27 @@ class UssdAccessibilityService : AccessibilityService() {
         
         multiDialogRunnable = Runnable {
             Log.d(TAG, "🏁 Multi-dialog listener ended. Total clicks: $clickCount")
+
+            // Last-chance terminal capture. Some carrier/OEM dialogs expose their
+            // final OK button only after the last content-change event, so no new
+            // accessibility event arrives for the normal terminal handler.
+            val freshRoot = rootInActiveWindow
+            if (freshRoot != null) {
+                try {
+                    val finalText = extractDialogText(freshRoot)
+                    if (isRealUssdDialog(freshRoot) && isTerminalResultDialog(freshRoot, finalText)) {
+                        if (!finalText.isNullOrBlank()) saveUssdResponse(finalText, isFinal = true)
+                        if (clickTerminalDismissButton(freshRoot)) {
+                            Log.i(TAG, "✅ Captured and dismissed terminal OK at listener timeout")
+                        }
+                    }
+                } finally {
+                    try { freshRoot.recycle() } catch (_: Exception) {}
+                }
+            }
             
             // Reset click count for next session
+            val totalClicks = clickCount
             clickCount = 0
             
             // Reset expecting flag
@@ -2153,7 +2182,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Send final completion broadcast with package name for Android 13+
             sendBroadcast(Intent(ACTION_USSD_CLICK_COMPLETE).apply {
                 setPackage("com.iftin.delivery")
-                putExtra("total_clicks", clickCount)
+                putExtra("total_clicks", totalClicks)
                 putExtra("success", true)
             })
         }
