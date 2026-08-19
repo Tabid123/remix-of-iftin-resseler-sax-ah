@@ -1365,7 +1365,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // ALWAYS save dialog text if not empty - for delivery_notes
             if (!dialogText.isNullOrBlank()) {
                 Log.d(TAG, "📝 Dialog text captured: ${dialogText.take(200)}")
-                saveUssdResponse(dialogText)
+                saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source))
             }
 
             val hardStopRoot = rootInActiveWindow ?: source
