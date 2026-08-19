@@ -1783,7 +1783,7 @@ class UssdDialerService : Service() {
                     val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
                     val finalText = when {
                         !newerFinal.isNullOrBlank() && !isJunkUssdText(newerFinal) -> newerFinal
-                        !newer.isNullOrBlank() && !isJunkUssdText(newer) -> newer
+                        !newer.isNullOrBlank() && !isJunkUssdText(newer) && !isIntermediateDialogText(newer) -> newer
                         else -> response
                     }
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
