@@ -1779,6 +1779,14 @@ class UssdAccessibilityService : AccessibilityService() {
      */
     private fun looksLikeUssdResponse(text: String): Boolean {
         val t = text.lowercase()
+        return !LAUNCHER_MARKERS.any { t.contains(it) } && run {
+            val parts = text.split(" | ").filter { it.isNotBlank() }
+            !(parts.size >= 12 && parts.none { it.length > 30 })
+        } && text.trim().length >= 3
+    }
+
+    private fun unusedLooksLikeUssdResponse(text: String): Boolean {
+        val t = text.lowercase()
         val launcherMarkers = listOf(
             "double tap and drag", "home screen", "play store", "google search",
             "google app", "voice search", "apps list", "page 1 of", "page 2 of",
