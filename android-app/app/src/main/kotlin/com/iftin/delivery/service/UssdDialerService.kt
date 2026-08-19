@@ -1875,14 +1875,26 @@ class UssdDialerService : Service() {
             // carrier never receives the PIN/receiver/amount → "Invalid PIN format".
             if (allowSilent && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 android.util.Log.d("UssdDialer", "🔇 Trying SILENT USSD via TelephonyManager...")
-                
-                val silentSuccess = trySilentUssd(finalUssd, subscriptionId)
-                if (silentSuccess) {
-                    android.util.Log.d("UssdDialer", "✅ Silent USSD completed successfully!")
-                    return true
+
+                when (trySilentUssd(finalUssd, subscriptionId)) {
+                    SilentUssdResult.SUCCESS -> {
+                        android.util.Log.d("UssdDialer", "✅ Silent USSD completed successfully!")
+                        return true
+                    }
+                    SilentUssdResult.DISPATCHED_NO_REPLY -> {
+                        // The request DID leave the phone (network refused / timed out
+                        // while answering). Re-dialing via the visible dialer would
+                        // send the money a SECOND time — never do that.
+                        android.util.Log.w(
+                            "UssdDialer",
+                            "📨 Silent USSD dispatched but no readable reply — NOT re-dialing (duplicate guard)"
+                        )
+                        return true
+                    }
+                    SilentUssdResult.NOT_SENT -> {
+                        android.util.Log.d("UssdDialer", "⚠️ Silent USSD never left the phone, trying Intent fallback...")
+                    }
                 }
-                
-                android.util.Log.d("UssdDialer", "⚠️ Silent USSD failed, trying Intent fallback...")
             } else if (!allowSilent) {
                 android.util.Log.d("UssdDialer", "🎛️ Interactive flow → skipping silent USSD, using visible dialer")
             }
@@ -1901,8 +1913,10 @@ class UssdDialerService : Service() {
      * Silent USSD using TelephonyManager.sendUssdRequest()
      * Works on Android 8.0+ and doesn't show dialer UI
      */
+    private enum class SilentUssdResult { SUCCESS, DISPATCHED_NO_REPLY, NOT_SENT }
+
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun trySilentUssd(ussdCode: String, subscriptionId: Int): Boolean {
+    private suspend fun trySilentUssd(ussdCode: String, subscriptionId: Int): SilentUssdResult {
         return suspendCancellableCoroutine { continuation ->
             try {
                 val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
@@ -1920,7 +1934,7 @@ class UssdDialerService : Service() {
                         saveUssdResponse(response.toString())
                         
                         if (continuation.isActive) {
-                            continuation.resume(true)
+                            continuation.resume(SilentUssdResult.SUCCESS)
                         }
                     }
                     
@@ -1935,9 +1949,11 @@ class UssdDialerService : Service() {
                             else -> "UNKNOWN ($failureCode)"
                         }
                         android.util.Log.e("UssdDialer", "🔇 SILENT USSD Failed: $reason")
-                        
+
+                        // The network answered with a failure/MMI notice — the code was
+                        // already sent. Treat as dispatched, wait for the carrier SMS.
                         if (continuation.isActive) {
-                            continuation.resume(false)
+                            continuation.resume(SilentUssdResult.DISPATCHED_NO_REPLY)
                         }
                     }
                 }
@@ -1958,16 +1974,16 @@ class UssdDialerService : Service() {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (continuation.isActive) {
                         android.util.Log.w("UssdDialer", "⏱️ Silent USSD timeout (20s)")
-                        continuation.resume(false)
+                        continuation.resume(SilentUssdResult.DISPATCHED_NO_REPLY)
                     }
                 }, 20000)
                 
             } catch (e: SecurityException) {
                 android.util.Log.e("UssdDialer", "🔒 Silent USSD permission denied: ${e.message}")
-                if (continuation.isActive) continuation.resume(false)
+                if (continuation.isActive) continuation.resume(SilentUssdResult.NOT_SENT)
             } catch (e: Exception) {
                 android.util.Log.e("UssdDialer", "❌ Silent USSD exception: ${e.message}")
-                if (continuation.isActive) continuation.resume(false)
+                if (continuation.isActive) continuation.resume(SilentUssdResult.NOT_SENT)
             }
         }
     }
