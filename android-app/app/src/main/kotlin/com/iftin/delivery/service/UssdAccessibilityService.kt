@@ -467,14 +467,22 @@ class UssdAccessibilityService : AccessibilityService() {
         if (expected.isBlank()) return false
         val candidates = collectEditableFieldCandidates(root)
         return try {
-            val best = selectBestEditableCandidate(candidates) ?: return false
-            try { best.node.refresh() } catch (_: Exception) {}
-            val actual = best.node.text?.toString()?.trim().orEmpty()
-            val maskedValue = actual.length == expected.length && actual.all { it == '•' || it == '*' }
-            // Only trust the selected EditText itself. A masked string elsewhere in
-            // the window (debug overlay, stale node, another field) must never unlock
-            // Send while the active PIN field is empty.
-            actual == expected || maskedValue
+            // Some carrier dialogs expose both the real EditText and a second hidden
+            // accessibility EditText. Selecting only one "best" candidate can pick
+            // the empty mirror even though the visible field contains the exact value,
+            // which permanently blocks Send. Trust any visible/enabled editable that
+            // contains the exact expected value (or a same-length masked PIN).
+            candidates.any { candidate ->
+                if (!candidate.isVisible || !candidate.isEnabled || !candidate.isEditable) {
+                    false
+                } else {
+                    try { candidate.node.refresh() } catch (_: Exception) {}
+                    val actual = candidate.node.text?.toString()?.trim().orEmpty()
+                    val maskedValue = actual.length == expected.length &&
+                        actual.all { it == '•' || it == '*' }
+                    actual == expected || maskedValue
+                }
+            }
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
@@ -2340,9 +2348,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 2. If the dialog still has an empty input box, refuse to click Send/OK —
-        //    something must be typed first (either by a dynamic flow step or the user).
-        if (hasEmptyEditableInput) {
+        // 2. Carrier dialogs can expose a filled real field plus an empty hidden mirror.
+        //    Block only when every editable is empty; one committed field is sufficient.
+        if (hasEmptyEditableInput && !hasFilledEditableInput) {
             Log.i(TAG, "🛑 Suppressing auto-click — dialog has empty input field (would trigger 'Input required')")
             return true
         }
@@ -2427,12 +2435,24 @@ class UssdAccessibilityService : AccessibilityService() {
         )
     }
 
-    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String = text.orEmpty()
-        .let { raw -> if (transientValue.isNotBlank()) raw.replace(transientValue, "", ignoreCase = true) else raw }
-        .lowercase()
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .take(220)
+    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String {
+        val expected = transientValue.trim()
+        return text.orEmpty()
+            // extractDialogText separates accessibility nodes with " | ". Once the
+            // value is typed, the EditText adds a new segment. Remove that whole
+            // transient segment (not the same digits from the actual prompt), then
+            // rebuild the fingerprint so no empty "| |" delimiter causes a false
+            // stale-dialog mismatch and blocks Send forever.
+            .split('|')
+            .map { it.trim() }
+            .filter { segment -> expected.isBlank() || !segment.equals(expected, ignoreCase = true) }
+            .filter { it.isNotBlank() }
+            .joinToString(" | ")
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(220)
+    }
     
     /**
      * Send broadcast to notify UssdDialerService that we clicked a button
