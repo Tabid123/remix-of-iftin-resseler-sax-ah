@@ -120,6 +120,24 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * Stores the last 20 incoming SMS bodies (with timestamps) in SharedPreferences.
+     * UssdDialerService reads this to resolve an order result when the final USSD
+     * dialog was missed — matching on receiver number + amount.
+     */
+    private fun logSmsLocally(context: Context, body: String) {
+        try {
+            val prefs = context.getSharedPreferences("iftin_sms_log", Context.MODE_PRIVATE)
+            val existing = prefs.getString("entries", "").orEmpty()
+            val clean = body.replace("\u0001", " ").replace("\n", " ").trim()
+            val entry = "${System.currentTimeMillis()}\u0001$clean"
+            val list = (existing.split("\u0002").filter { it.isNotBlank() } + entry).takeLast(20)
+            prefs.edit().putString("entries", list.joinToString("\u0002")).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to log SMS locally: ${e.message}")
+        }
+    }
+
     private fun getSimSlot(context: Context, intent: Intent): Int {
         return try {
             val subscriptionId = intent.getIntExtra("subscription", -1)
