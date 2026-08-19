@@ -1721,7 +1721,8 @@ class UssdDialerService : Service() {
         receiverPhone: String,
         packageCode: String?,
         provider: String,
-        simSlot: Int? = null
+        simSlot: Int? = null,
+        allowSilent: Boolean = true
     ): Boolean {
         try {
             val finalUssd = ussdCode.trim()
@@ -1730,6 +1731,7 @@ class UssdDialerService : Service() {
             android.util.Log.d("UssdDialer", "Provider: $provider")
             android.util.Log.d("UssdDialer", "Final USSD: $finalUssd")
             android.util.Log.d("UssdDialer", "Database simSlot: $simSlot")
+            android.util.Log.d("UssdDialer", "Allow silent USSD: $allowSilent")
 
             // Check permissions
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED ||
@@ -1747,8 +1749,11 @@ class UssdDialerService : Service() {
             
             android.util.Log.d("UssdDialer", "🎯 Using subscriptionId: $subscriptionId")
             
-            // 🔇 TRY SILENT USSD FIRST (Android 8.0+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 🔇 TRY SILENT USSD FIRST (Android 8.0+) — ONLY for single-step providers.
+            // Interactive flows (Somtel *300#, Somnet *825#) MUST use the visible dialer:
+            // sendUssdRequest() closes the session after the first network reply, so the
+            // carrier never receives the PIN/receiver/amount → "Invalid PIN format".
+            if (allowSilent && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 android.util.Log.d("UssdDialer", "🔇 Trying SILENT USSD via TelephonyManager...")
                 
                 val silentSuccess = trySilentUssd(finalUssd, subscriptionId)
@@ -1758,6 +1763,8 @@ class UssdDialerService : Service() {
                 }
                 
                 android.util.Log.d("UssdDialer", "⚠️ Silent USSD failed, trying Intent fallback...")
+            } else if (!allowSilent) {
+                android.util.Log.d("UssdDialer", "🎛️ Interactive flow → skipping silent USSD, using visible dialer")
             }
             
             // FALLBACK: Use Intent.ACTION_CALL (shows dialer)
