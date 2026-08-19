@@ -1886,6 +1886,51 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Dismiss a terminal USSD result dialog by pressing OK / Close / Haye.
+     * Never presses Cancel-like buttons first, and falls back to the standard
+     * android:id/button1 positive button when the label is unknown.
+     */
+    private fun clickTerminalDismissButton(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        val labels = listOf(
+            "OK", "Ok", "ok", "OKAY", "Okay", "okay",
+            "Close", "close", "CLOSE",
+            "Dismiss", "dismiss", "DISMISS",
+            "Done", "done", "DONE",
+            "Haye", "haye", "HAYE", "Haa", "haa", "HAA", "Hagaag", "hagaag"
+        )
+        for (label in labels) {
+            val nodes = try { root.findAccessibilityNodeInfosByText(label) } catch (_: Exception) { null } ?: continue
+            for (node in nodes) {
+                try {
+                    if (isClickableButton(node)) {
+                        if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            Log.d(TAG, "✅ Terminal dialog dismissed via '$label'")
+                            nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
+                            try { node.recycle() } catch (_: Exception) {}
+                            return true
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+            nodes.forEach { n -> try { n.recycle() } catch (_: Exception) {} }
+        }
+        // Fallback: the AlertDialog positive button
+        val positive = try {
+            root.findAccessibilityNodeInfosByViewId("android:id/button1")?.firstOrNull()
+        } catch (_: Exception) { null }
+        if (positive != null) {
+            val ok = try { positive.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+            try { positive.recycle() } catch (_: Exception) {}
+            if (ok) {
+                Log.d(TAG, "✅ Terminal dialog dismissed via android:id/button1")
+                return true
+            }
+        }
+        return false
+    }
+
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
         // (see clickTerminalDismissButton below for terminal dialog handling)
         try {
