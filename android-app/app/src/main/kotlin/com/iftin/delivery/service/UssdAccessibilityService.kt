@@ -155,6 +155,25 @@ class UssdAccessibilityService : AccessibilityService() {
             "com.coloros.phone",
             "com.realme.phone"
         )
+
+        /** Text fragments that prove we are reading the launcher, not a USSD dialog. */
+        private val LAUNCHER_MARKERS = listOf(
+            "double tap and drag", "home screen", "play store", "google search",
+            "google app", "voice search", "apps list", "page 1 of", "page 2 of",
+            "current page is", "notification shade", "quick settings", "widget"
+        )
+
+        fun isPhoneLikePackage(pkg: String): Boolean {
+            val p = pkg.lowercase()
+            // NOTE: launchers must never match here.
+            if (p.contains("launcher") || p.contains("home")) return false
+            return p.contains("phone") || p.contains("dialer") || p.contains("stk") ||
+                p.contains("toolkit") || p.contains("telecom") || p.contains("incall") ||
+                p.contains("ussd") || p.contains("call")
+        }
+
+        fun isUssdRelatedPackage(pkg: String): Boolean =
+            USSD_PACKAGES.any { pkg.contains(it, ignoreCase = true) } || isPhoneLikePackage(pkg)
         
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
