@@ -1543,7 +1543,9 @@ class UssdAccessibilityService : AccessibilityService() {
                 !s.isPinField &&
                 completedFlowSteps.isNotEmpty() &&
                 !looksLikePinDialog &&
-                hasVisibleEditableInput(root) &&
+                // A confirmation menu ("1. Haa / 2. Maya") sometimes exposes no
+                // EditText to Accessibility; still allow the numeric answer there.
+                (hasVisibleEditableInput(root) || isMenuList) &&
                 // Numbered menus (incl. the final "1. Haa / 2. Maya" confirmation)
                 // may be auto-answered ONLY when the pending step is a short menu
                 // selection like "1" or "2" — never free text such as a phone number.
