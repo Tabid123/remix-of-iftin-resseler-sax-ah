@@ -1714,6 +1714,21 @@ class UssdDialerService : Service() {
                 val useFinal = !finalDialog.isNullOrBlank() && System.currentTimeMillis() - finalTime < 30000
                 val response = if (useFinal) finalDialog
                     else prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                if (isJunkUssdText(response)) {
+                    // "USSD code running…" toasts / launcher noise are NOT results.
+                    prefs.edit()
+                        .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
+                        .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                        .apply()
+                    if (useFinal) {
+                        prefs.edit()
+                            .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE)
+                            .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME)
+                            .apply()
+                    }
+                    delay(500)
+                    return@repeat
+                }
                 val responseTime = if (useFinal) finalTime
                     else prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
                 
@@ -1726,8 +1741,8 @@ class UssdDialerService : Service() {
                     val newerFinal = prefs.getString(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE, null)
                     val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
                     val finalText = when {
-                        !newerFinal.isNullOrBlank() -> newerFinal
-                        !newer.isNullOrBlank() -> newer
+                        !newerFinal.isNullOrBlank() && !isJunkUssdText(newerFinal) -> newerFinal
+                        !newer.isNullOrBlank() && !isJunkUssdText(newer) -> newer
                         else -> response
                     }
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
