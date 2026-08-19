@@ -2042,8 +2042,64 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Click a numbered menu entry (e.g. "1. Haa") when the carrier dialog exposes
+     * the options as clickable rows instead of an input field.
+     */
+    private fun clickNumberedMenuOption(root: AccessibilityNodeInfo, choice: String): Boolean {
+        val nodes = try { root.findAccessibilityNodeInfosByText(choice) } catch (_: Exception) { null } ?: return false
+        return try {
+            nodes.any { n ->
+                val label = (n.text?.toString() ?: n.contentDescription?.toString()).orEmpty().trim()
+                val isOption = Regex("^$choice\\s*[.)-]").containsMatchIn(label)
+                if (isOption && n.isVisibleToUser) {
+                    var target: AccessibilityNodeInfo? = n
+                    while (target != null && !target.isClickable) target = target.parent
+                    target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+                } else false
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            nodes.forEach { try { it.recycle() } catch (_: Exception) {} }
+        }
+    }
+
+    /**
+     * True when the on-screen dialog is a choice prompt ("1. Haa / 2. Maya" or a
+     * numbered menu) and the active flow still has an unanswered numeric step.
+     * In that state the generic Send/OK clicker must stay away — otherwise Send is
+     * pressed without a choice and the carrier cancels the transfer.
+     */
+    private fun hasUnansweredChoiceStep(dialogText: String?): Boolean {
+        if (dialogText.isNullOrBlank()) return false
+        val lower = dialogText.lowercase()
+        val looksLikeChoice = looksLikeNumberedMenu(dialogText) ||
+            (lower.contains("haa") && lower.contains("maya")) ||
+            lower.contains("ma hubtaa")
+        if (!looksLikeChoice) return false
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val flow = try {
+            UssdFlowsClient.findFlowById(prefs.getString("current_ussd_flow_id", null))
+                ?: UssdFlowsClient.findFlowForTrigger(prefs.getString("current_trigger_code", null))
+        } catch (_: Exception) { null } ?: return false
+        return flow.steps.any { s ->
+            s.order !in completedFlowSteps && !s.isPinField &&
+                s.responseTemplate.trim().trim('{', '}').let { t ->
+                    t.isNotEmpty() && t.length <= 2 && t.all(Char::isDigit)
+                }
+        }
+    }
+
     private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
         if (shouldHardStopForPinStage(root, dialogText)) {
+            return true
+        }
+
+        // Never press Send on a "1. Haa / 2. Maya" style prompt before the choice
+        // has actually been entered/selected.
+        if (hasUnansweredChoiceStep(dialogText)) {
+            Log.i(TAG, "🛑 Suppressing auto-click — confirmation choice not selected yet")
             return true
         }
 
