@@ -1695,8 +1695,23 @@ class UssdDialerService : Service() {
         return null
     }
 
+    /**
+     * Transient system chatter that is never a carrier result — e.g. the
+     * "USSD code running…" progress toast or an empty/1-word screen scrape.
+     */
+    private fun isJunkUssdText(text: String?): Boolean {
+        val t = text?.trim().orEmpty()
+        if (t.isBlank()) return true
+        val lower = t.lowercase()
+        val markers = listOf(
+            "ussd code running", "running ussd", "connecting", "please wait",
+            "dialing", "sugitaan", "fadlan sug", "loading"
+        )
+        if (markers.any { lower.contains(it) } && t.length < 60) return true
+        return t.length < 6
+    }
+
     private suspend fun getLastUssdResponse(): String? {
-        // (junk filter helper below)
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
             
