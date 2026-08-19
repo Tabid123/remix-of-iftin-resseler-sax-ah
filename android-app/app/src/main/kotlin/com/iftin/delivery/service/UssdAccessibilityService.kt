@@ -1339,6 +1339,15 @@ class UssdAccessibilityService : AccessibilityService() {
                 source.recycle()
                 return
             }
+
+            // HARD GUARD: only act when a real USSD dialog is on screen.
+            // Without this the service types flow answers into the dialer keypad
+            // (e.g. "001" left in the dial pad) or presses Send on an empty screen.
+            if (!isRealUssdDialog(source)) {
+                Log.i(TAG, "🛑 No real USSD dialog on screen (pkg=$activePkg) — no typing / no clicking")
+                source.recycle()
+                return
+            }
             
             // CAPTURE ALL DIALOG TEXT FIRST - before any filtering
             val dialogText = extractDialogText(source)
