@@ -494,6 +494,24 @@ class UssdAccessibilityService : AccessibilityService() {
         return screenShowsValue(root, expected)
     }
 
+    /** True when the carrier dialog exposes at least one visible input containing data. */
+    private fun hasEnteredInputValue(root: AccessibilityNodeInfo): Boolean {
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            candidates.any { candidate ->
+                candidate.isVisible && candidate.isEnabled && candidate.isEditable &&
+                    try {
+                        candidate.node.refresh()
+                        !candidate.node.text?.toString()?.trim().isNullOrEmpty()
+                    } catch (_: Exception) {
+                        candidate.existingTextLength > 0
+                    }
+            }
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
+    }
+
     /** True when [expected] is visible as text somewhere in the dialog tree (non-button node). */
     private fun screenShowsValue(root: AccessibilityNodeInfo, expected: String): Boolean {
         val target = expected.trim()
@@ -2334,15 +2352,15 @@ class UssdAccessibilityService : AccessibilityService() {
         dialogText: String?,
         committedValue: String? = null
     ): Boolean {
+        // Once any visible input contains data, Send must not be held by the generic
+        // PIN/menu guards. The flow scheduler owns the value that was just entered.
+        val valueAlreadyCommitted = hasEnteredInputValue(root) ||
+            (!committedValue.isNullOrBlank() && isValueCommittedInActiveField(root, committedValue))
+        if (valueAlreadyCommitted) return false
+
         if (shouldHardStopForPinStage(root, dialogText)) {
             return true
         }
-
-        // If the flow already verified that its exact value sits in the dialog input,
-        // every "empty input" guard below is irrelevant — let Send through.
-        val valueAlreadyCommitted = !committedValue.isNullOrBlank() &&
-            isValueCommittedInActiveField(root, committedValue)
-        if (valueAlreadyCommitted) return false
 
         // Never press Send on a "1. Haa / 2. Maya" style prompt before the choice
         // has actually been entered/selected.
@@ -2424,16 +2442,18 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun clickSendOrOkButton(root: AccessibilityNodeInfo, requiredCommittedValue: String) {
         try {
             val dialogText = extractDialogText(root)
-            if (shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
+            val hasEnteredData = hasEnteredInputValue(root) ||
+                (requiredCommittedValue.isNotBlank() &&
+                    isValueCommittedInActiveField(root, requiredCommittedValue))
+            if (!hasEnteredData && shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 engagePinHardStop(dialogText)
                 Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
                 return
             }
-            // Absolute last-mile invariant: this method may submit only the exact
-            // value requested by the current flow step. ACTION_SET_TEXT returning
-            // true is insufficient; some carrier dialogs re-render and clear it.
-            if (requiredCommittedValue.isBlank() || !isValueCommittedInActiveField(root, requiredCommittedValue)) {
-                Log.e(TAG, "🛑 Send blocked — required value is not committed in the live input field")
+            // Keep empty dialogs protected, but do not require carrier-specific
+            // accessibility widgets to expose the exact value before clicking Send.
+            if (!hasEnteredData) {
+                Log.e(TAG, "🛑 Send blocked — dialog input is still empty")
                 return
             }
             if (shouldSuppressAutoClickForDialog(root, dialogText, requiredCommittedValue)) {
