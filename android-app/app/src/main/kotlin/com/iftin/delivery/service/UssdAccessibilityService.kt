@@ -1887,6 +1887,7 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
+        // (see clickTerminalDismissButton below for terminal dialog handling)
         try {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
