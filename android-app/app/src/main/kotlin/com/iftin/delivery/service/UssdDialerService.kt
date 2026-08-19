@@ -1711,6 +1711,24 @@ class UssdDialerService : Service() {
         return t.length < 6
     }
 
+    /**
+     * True when the captured text is an intermediate USSD *input* dialog
+     * (asks for a number/amount/PIN and shows Cancel|Send) rather than the
+     * carrier's final result message.
+     */
+    private fun isIntermediateDialogText(text: String?): Boolean {
+        val t = text?.trim().orEmpty()
+        if (t.isBlank()) return false
+        val lower = t.lowercase()
+        val inputMarkers = listOf(
+            "fadlan geli", "fadlan hubi", "geli mobile", "geli mobilka", "hubi mobilka",
+            "geli lacagta", "geli pin", "enter pin", "enter amount", "enter number",
+            "geli taleefan", "geli lambar"
+        )
+        val hasSendPair = lower.contains("send") && lower.contains("cancel")
+        return inputMarkers.any { lower.contains(it) } || hasSendPair
+    }
+
     private suspend fun getLastUssdResponse(): String? {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
