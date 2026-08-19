@@ -1419,8 +1419,18 @@ class UssdDialerService : Service() {
             val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot, allowSilent)
             
             if (dialSuccess) {
+                val dialStartedAt = System.currentTimeMillis()
                 // Get the captured USSD response from AccessibilityService
-                val ussdResponse = getLastUssdResponse()
+                var ussdResponse = getLastUssdResponse()
+                var resultFromSms = false
+                if (ussdResponse.isNullOrBlank()) {
+                    android.util.Log.d("UssdDialer", "🔎 No dialog result — waiting for confirmation SMS...")
+                    val sms = waitForConfirmationSms(order.receiverPhone, order.topupAmount, dialStartedAt)
+                    if (!sms.isNullOrBlank()) {
+                        ussdResponse = "[SMS] $sms"
+                        resultFromSms = true
+                    }
+                }
                 
                 // ===== DETERMINE STATUS BASED ON REAL RESPONSE =====
                 val finalStatus: String
@@ -1483,6 +1493,9 @@ class UssdDialerService : Service() {
                         finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
                         android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
                     }
+                }
+                if (resultFromSms) {
+                    android.util.Log.d("UssdDialer", "📩 Final status from SMS fallback: $finalStatus")
                 }
                 
                 val statusUpdated = updateDeliveryStatusWithRetry(
