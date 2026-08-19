@@ -1643,6 +1643,45 @@ class UssdDialerService : Service() {
      * Waits up to 2 seconds with retries for response to be captured
      * Only returns response if captured within last 30 seconds
      */
+    /**
+     * Fallback result source: when the final USSD dialog was missed, wait for the
+     * carrier confirmation SMS that mentions BOTH the receiver number and the amount.
+     */
+    private suspend fun waitForConfirmationSms(
+        receiverPhone: String,
+        amount: Double?,
+        startedAt: Long,
+        timeoutMs: Long = 45000L
+    ): String? {
+        val digits = receiverPhone.filter { it.isDigit() }
+        val tail = if (digits.length >= 7) digits.takeLast(7) else digits
+        val amountVariants = amount?.let {
+            listOf(String.format("%.2f", it), String.format("%.1f", it), it.toString())
+        } ?: emptyList()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val prefs = getSharedPreferences("iftin_sms_log", Context.MODE_PRIVATE)
+        while (System.currentTimeMillis() < deadline) {
+            val entries = prefs.getString("entries", "").orEmpty()
+                .split("\u0002").filter { it.isNotBlank() }
+            for (raw in entries.reversed()) {
+                val parts = raw.split("\u0001")
+                val ts = parts.getOrNull(0)?.toLongOrNull() ?: continue
+                val body = parts.getOrNull(1).orEmpty()
+                if (ts < startedAt - 5000) continue
+                val bodyDigits = body.filter { it.isDigit() }
+                val matchesPhone = tail.isNotBlank() && bodyDigits.contains(tail)
+                val matchesAmount = amountVariants.isEmpty() || amountVariants.any { body.contains(it) }
+                if (matchesPhone && matchesAmount) {
+                    android.util.Log.d("UssdDialer", "📩 Result resolved from SMS: ${body.take(120)}")
+                    return body
+                }
+            }
+            delay(2000)
+        }
+        android.util.Log.w("UssdDialer", "📭 No confirmation SMS matched receiver=$tail amount=$amount")
+        return null
+    }
+
     private suspend fun getLastUssdResponse(): String? {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
