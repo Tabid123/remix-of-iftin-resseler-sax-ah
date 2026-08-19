@@ -244,6 +244,12 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var lastHudError: String = ""
 
     private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
+        // HUD DISABLED: the yellow "PIN DEBUG" overlay must never be visible to users.
+        // Diagnostics are still written to logcat / SharedPreferences elsewhere.
+        if (!HUD_ENABLED) {
+            hidePinHud()
+            return
+        }
         try {
             val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
             val maskedActual = if (actual.isEmpty()) "<empty>" else actual
