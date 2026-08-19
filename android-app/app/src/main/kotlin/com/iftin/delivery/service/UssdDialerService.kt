@@ -1696,6 +1696,7 @@ class UssdDialerService : Service() {
     }
 
     private suspend fun getLastUssdResponse(): String? {
+        // (junk filter helper below)
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
             
