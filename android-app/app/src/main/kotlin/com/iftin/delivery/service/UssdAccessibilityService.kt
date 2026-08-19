@@ -1741,7 +1741,24 @@ class UssdAccessibilityService : AccessibilityService() {
      */
     private fun saveUssdResponse(text: String) {
         try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+            // 1) A silent (TelephonyManager) carrier reply is authoritative — never
+            //    overwrite it with on-screen text.
+            val silentAt = prefs.getLong(KEY_SILENT_RESPONSE_AT, 0L)
+            if (silentAt > 0L && System.currentTimeMillis() - silentAt < 120_000L) {
+                Log.d(TAG, "🔇 Silent USSD reply already stored — skipping screen capture")
+                return
+            }
+
+            // 2) Reject anything that is clearly NOT a USSD dialog (launcher / home
+            //    screen text captured after the dialog was dismissed).
+            if (!looksLikeUssdResponse(text)) {
+                Log.w(TAG, "🚮 Ignoring non-USSD screen text: ${text.take(80)}")
+                return
+            }
+
+            prefs
                 .edit()
                 .putString(KEY_LAST_USSD_RESPONSE, text)
                 .putLong(KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
@@ -1750,6 +1767,25 @@ class UssdAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to save USSD response: ${e.message}")
         }
+    }
+
+    /**
+     * Heuristic guard: the delayed runnables read `rootInActiveWindow`, which can be the
+     * launcher/home screen once the USSD dialog is dismissed. Storing that as the carrier
+     * reply produced garbage delivery notes ("Google Search | Play Store | Camera ...").
+     */
+    private fun looksLikeUssdResponse(text: String): Boolean {
+        val t = text.lowercase()
+        val launcherMarkers = listOf(
+            "double tap and drag", "home screen", "play store", "google search",
+            "google app", "voice search", "apps list", "page 1 of", "page 2 of",
+            "current page is", "notification shade", "quick settings", "widget"
+        )
+        if (launcherMarkers.any { t.contains(it) }) return false
+        // A launcher dump is a long pipe-joined list of short icon labels.
+        val parts = text.split(" | ").filter { it.isNotBlank() }
+        if (parts.size >= 12 && parts.count { it.length > 30 } == 0) return false
+        return text.trim().length >= 3
     }
     
     /**
