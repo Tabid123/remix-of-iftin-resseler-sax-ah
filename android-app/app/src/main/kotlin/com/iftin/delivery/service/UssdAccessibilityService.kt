@@ -178,8 +178,14 @@ class UssdAccessibilityService : AccessibilityService() {
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
         private const val DEBOUNCE_MS = 800L
-        private const val CLICK_DELAY_MS = 1400L
-        private const val NON_PIN_SUBMIT_DELAY_MS = 1800L
+        private const val CLICK_DELAY_MS = 1800L
+        private const val NON_PIN_SUBMIT_DELAY_MS = 2600L
+
+        /** Resource-id fragments that identify the dialer keypad (NOT a USSD dialog). */
+        private val DIALPAD_ID_MARKERS = listOf(
+            "dialpad", "digits", "keypad", "dialButton", "one", "two", "three",
+            "zero", "deleteButton", "searchview"
+        )
         private const val MAX_PIN_REWRITE_ATTEMPTS = 2
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
