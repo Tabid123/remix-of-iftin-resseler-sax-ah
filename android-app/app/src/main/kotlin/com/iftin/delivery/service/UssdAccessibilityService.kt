@@ -1208,14 +1208,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
         // Check if event is from a phone/dialer-related app
         val isUssdPackage = USSD_PACKAGES.any { packageName.contains(it, ignoreCase = true) }
-        val isPhonePackage = packageName.contains("phone", ignoreCase = true) ||
-                            packageName.contains("dialer", ignoreCase = true) ||
-                            packageName.contains("stk", ignoreCase = true) ||
-                            packageName.contains("toolkit", ignoreCase = true) ||
-                            packageName.contains("telecom", ignoreCase = true) ||
-                            packageName.contains("incall", ignoreCase = true) ||
-                            packageName.contains("ussd", ignoreCase = true) ||
-                            packageName.contains("call", ignoreCase = true)
+        val isPhonePackage = isPhoneLikePackage(packageName)
 
         if (!expectingUssd) {
             ussdSessionToken = 0L
