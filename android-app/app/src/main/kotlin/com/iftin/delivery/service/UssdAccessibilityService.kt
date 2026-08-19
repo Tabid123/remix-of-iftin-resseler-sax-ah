@@ -233,8 +233,8 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var ignoredEventCount = 0
 
     // ===== PIN HUD OVERLAY =====
-    // Visible system overlay that shows live PIN-write state on top of the USSD
-    // dialog so the user can see exactly what was typed without adb logcat.
+    // Debug-only overlay. Permanently disabled in production builds.
+    private val HUD_ENABLED = false
     private var hudView: TextView? = null
     private var hudAttached = false
     private val hudDismissRunnable = Runnable { hidePinHud() }
