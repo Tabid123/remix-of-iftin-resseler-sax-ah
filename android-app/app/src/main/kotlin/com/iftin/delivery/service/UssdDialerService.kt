@@ -1647,12 +1647,14 @@ class UssdDialerService : Service() {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
             
-            // Wait 1 second for AccessibilityService to capture response
-            android.util.Log.d("UssdDialer", "⏳ Waiting 1s for USSD response capture...")
-            delay(1000)
-            
-            // Retry up to 3 times with 500ms delay
-            repeat(3) { attempt ->
+            // Wait for AccessibilityService to capture the final carrier response.
+            android.util.Log.d("UssdDialer", "⏳ Waiting for USSD response capture...")
+            delay(1500)
+
+            // Poll for up to ~12s so the real provider result (not an intermediate
+            // dialog) is what gets reported back for the order.
+            val maxAttempts = 22
+            repeat(maxAttempts) { attempt ->
                 val response = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
                 val responseTime = prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
                 
@@ -1683,13 +1685,15 @@ class UssdDialerService : Service() {
                     } else response
                 }
                 
-                if (attempt < 2) {
-                    android.util.Log.d("UssdDialer", "⏳ No response yet, retrying in 500ms (attempt ${attempt+1}/3)")
+                if (attempt < maxAttempts - 1) {
+                    if (attempt % 5 == 0) {
+                        android.util.Log.d("UssdDialer", "⏳ No response yet (attempt ${attempt + 1}/$maxAttempts)")
+                    }
                     delay(500)
                 }
             }
             
-            android.util.Log.d("UssdDialer", "⚠️ No USSD response captured after 3 attempts")
+            android.util.Log.d("UssdDialer", "⚠️ No USSD response captured after $maxAttempts attempts")
             return null
         } catch (e: Exception) {
             android.util.Log.e("UssdDialer", "❌ Error reading USSD response: ${e.message}")
