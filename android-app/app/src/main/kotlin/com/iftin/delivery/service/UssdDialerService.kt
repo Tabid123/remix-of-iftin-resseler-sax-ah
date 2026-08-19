@@ -1655,8 +1655,15 @@ class UssdDialerService : Service() {
             // dialog) is what gets reported back for the order.
             val maxAttempts = 22
             repeat(maxAttempts) { attempt ->
-                val response = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
-                val responseTime = prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
+                // The LAST dialog (OK-only, no input field) is the authoritative
+                // carrier result — prefer it over intermediate menu text.
+                val finalDialog = prefs.getString(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE, null)
+                val finalTime = prefs.getLong(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME, 0)
+                val useFinal = !finalDialog.isNullOrBlank() && System.currentTimeMillis() - finalTime < 30000
+                val response = if (useFinal) finalDialog
+                    else prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                val responseTime = if (useFinal) finalTime
+                    else prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
                 
                 // Only use response if it was captured within the last 30 seconds
                 val ageMs = System.currentTimeMillis() - responseTime
@@ -1664,8 +1671,13 @@ class UssdDialerService : Service() {
                     // Settle window: the carrier often replaces an intermediate dialog
                     // with the real result a moment later. Take the newest text.
                     delay(2000)
+                    val newerFinal = prefs.getString(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE, null)
                     val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
-                    val finalText = if (!newer.isNullOrBlank()) newer else response
+                    val finalText = when {
+                        !newerFinal.isNullOrBlank() -> newerFinal
+                        !newer.isNullOrBlank() -> newer
+                        else -> response
+                    }
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
                     android.util.Log.d("UssdDialer", "📝 Response content: ${finalText.take(150)}")
                     
@@ -1673,6 +1685,8 @@ class UssdDialerService : Service() {
                     prefs.edit()
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                        .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE)
+                        .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME)
                         .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                         .apply()
 
