@@ -1661,8 +1661,13 @@ class UssdDialerService : Service() {
                 // Only use response if it was captured within the last 30 seconds
                 val ageMs = System.currentTimeMillis() - responseTime
                 if (ageMs < 30000 && !response.isNullOrBlank()) {
+                    // Settle window: the carrier often replaces an intermediate dialog
+                    // with the real result a moment later. Take the newest text.
+                    delay(2000)
+                    val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                    val finalText = if (!newer.isNullOrBlank()) newer else response
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
-                    android.util.Log.d("UssdDialer", "📝 Response content: ${response.take(150)}")
+                    android.util.Log.d("UssdDialer", "📝 Response content: ${finalText.take(150)}")
                     
                     // Clear the response after reading to prevent reuse
                     prefs.edit()
@@ -1673,16 +1678,16 @@ class UssdDialerService : Service() {
 
                     // Attach PIN diagnostic snapshot if carrier rejected PIN — surfaces
                     // root cause in admin delivery_notes without needing adb logcat.
-                    val mentionsInvalidPin = response.contains("invalid pin", ignoreCase = true) ||
-                        response.contains("pin khaldan", ignoreCase = true) ||
-                        response.contains("pin format", ignoreCase = true) ||
-                        response.contains("wrong pin", ignoreCase = true)
+                    val mentionsInvalidPin = finalText.contains("invalid pin", ignoreCase = true) ||
+                        finalText.contains("pin khaldan", ignoreCase = true) ||
+                        finalText.contains("pin format", ignoreCase = true) ||
+                        finalText.contains("wrong pin", ignoreCase = true)
                     return if (mentionsInvalidPin) {
                         val debug = prefs.getString(UssdAccessibilityService.KEY_LAST_PIN_DEBUG, null)
                         if (!debug.isNullOrBlank()) {
-                            "$response\n\n--- PIN DEBUG ---\n$debug"
-                        } else response
-                    } else response
+                            "$finalText\n\n--- PIN DEBUG ---\n$debug"
+                        } else finalText
+                    } else finalText
                 }
                 
                 if (attempt < maxAttempts - 1) {
