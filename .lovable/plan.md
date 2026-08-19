@@ -1,136 +1,64 @@
 ## Hadafka
-Admin-ku ha awoodo inuu **shirkad USSD cusub** hal Wizard ku daro, isla marka ay shaqeyso ~99-100% adiga oo aan taabanayn code. Sirta 100%-ku waxay ku jirtaa 3 layers:
+Mashruuca ka dhig **SaaS multi-tenant**: reseller kasta wuxuu leeyahay account, device/SIM kiisa, iyo rate/tiers uu isagu u sameysto shirkad kasta. Shirkadaha waa 4 oo hard-code ah: **Hormuud, Somtel, Somnet, Amtel**. Dalab kasta wuu automatic noqonayaa (USSD flow + PIN + delivery).
 
-1. **Wizard Auto-Learn** — Admin wuxuu copy-paste garaa qoraalka dialog-ga, system-ku wuxuu automatic u soo saarayaa keywords + synonyms Soomaali/Ingiriisi.
-2. **Test Live Button** — Ka hor kaydinta, Wizard-ku wuxuu SIM-ka runta ah kaga tijaabinayaa flow-ga dummy amount (0.01). Haddii step fashilmo → si toos ah keywords ayaa lagu darayaa.
-3. **Self-Healing Learning Loop** — Marka Android-ka accessibility service uu la kulmo dialog uu keywords-ka la hayo aan ku jirin, si automatic ah wuxuu ugu darayaa `ussd_flow_steps.match_keywords` array-ka (learn-as-you-go).
+## Qaab-dhismeedka cusub
 
-## Wizard cusub — `AddUssdProviderWizardDialog.tsx`
+### 1. Tenants (reseller businesses)
+Table cusub `tenants` (id, name, slug, owner_user_id, is_active, created_at).
+Table cusub `tenant_members` (tenant_id, user_id, role: owner/staff).
+Function `current_tenant_id()` — security definer, waxay ka soo celisaa tenant-ka user-ka hadda.
 
-### Tallaabo 1 — Provider Info
-- Magaca (Somnet, Amtel, …)
-- Logo URL (ikhtiyaari)
-- Display order + E-voucher rate
-- **PIN (SIM Password)** 4 digits
-- Trigger USSD Code (`*300#`, `*707#`)
+### 2. `tenant_id` lagu darayo table walba
+Kuwa la beddelayo: `orders`, `delivery_queue`, `payment_receipts`, `pending_online_payments`, `android_devices`, `devices`, `sim_balances`, `provider_wholesale_tiers`, `data_packages_config`, `package_categories`, `delivery_instructions`, `offline_registrations`, `customer_discounts`, `discount_codes`, `auto_topup_numbers`, `blocked_users`, `bulk_sms_campaigns`, `verified_phones`.
 
-### Tallaabo 2 — Flow Steps (Auto-Learn)
-Step kasta wuxuu leeyahay 3 field:
+Xogta hadda jirta oo dhan waxaa loo qoondaynayaa hal tenant ("Iftin") si aan waxba u lumin.
 
-**A) Dialog Text** — Textarea:
-```
-Enter receiver number:
-```
+### 3. RLS oo dhan la beddelayo
+Policy walba wuxuu noqonayaa: `tenant_id = current_tenant_id()` (ama `has_role(auth.uid(),'admin')` platform-admin ahaan).
+Edge functions (service_role) sida hadda ayay u shaqaynayaan, laakiin `tenant_id` way qori doonaan.
 
-**B) [🪄 Auto-Detect Keywords]** button → wuxuu buuxinayaa liis checkbox ah:
-- ✓ enter receiver
-- ✓ receiver
-- ✓ number
-- ✓ lambar (synonym)
-- ✓ raac (synonym)
-
-Admin-ku wuu kordhin karaa ama ka saari karaa.
-
-**C) Response Template** — (`{receiver}`, `{amount}`, `{pin}`, `3`, `1`)
-
-**D) is_pin_field toggle** — haddii true → HARD-STOP manual.
-
-### Templates preset ah (dropdown)
-- Somtel *300# — 4 steps (already tested)
-- Hormuud *725# — 5 steps
-- **Blank flow** (from scratch)
-
-### Tallaabo 3 — Test Live 🧪
-Ka hor kaydinta:
-- Button **"Test Flow (SIM tijaabo)"**
-- Ka codsada admin-ka lambar dummy oo SIM-kiisa ah + amount = 0.01
-- Direys command Android device-ka via `delivery_queue` gaar ah oo `test=true`
-- Muuji real-time status:
-  - ✅ Step 1: Menu ka helay "3"
-  - ✅ Step 2: Receiver ka helay
-  - ❌ Step 3: Dialog "Xaqiiji lacagta" ma matchin
-  - → **Auto-add** keyword `xaqiiji` gadaal ka `Step 3.match_keywords`
-- Retry ilaa dhamaan steps ay ✅ noqdaan.
-
-### Tallaabo 4 — Save & Activate
-Transaction:
-1. `INSERT INTO ussd_flows` (flow_name, trigger_code, is_enabled=true)
-2. `INSERT INTO ussd_flow_steps` (bulk)
-3. `INSERT INTO providers_config` (ussd_method='interactive', ussd_flow_id, sim_password, is_active=true)
-
-## Synonym Dictionary — `src/lib/ussdSynonyms.ts`
-Faylka gudaha oo ka kooban ~50 word mapping ah:
+### 4. Shirkadaha 4-da hard-code
+`src/config/carriers.ts` — hal fayl:
 ```ts
-export const SYNONYMS: Record<string, string[]> = {
-  amount: ['amount','mount','lacag','qiimo','sum','wadarta'],
-  receiver: ['receiver','reciver','number','lambar','raac','phone','telefoon'],
-  pin: ['pin','sirta','furaha','password','secret'],
-  send: ['send','dir','sii wad','submit','ok','fadlan'],
-  confirm: ['confirm','xaqiiji','yes','haa','1'],
-  cancel: ['cancel','jooji','no','maya','2'],
-  menu: ['select','menu','xulo','option','doorasho'],
-  credit: ['credit','airtime','sii-jir'],
-};
-
-export function extractKeywords(dialogText: string): string[] {
-  const stopWords = new Set(['the','a','is','of','please','kindly','fadlan','waan','ku','ah','to','from']);
-  const words = dialogText.toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 3 && !stopWords.has(w));
-  const bigrams = words.slice(0,-1).map((w,i) => `${w} ${words[i+1]}`);
-  const all = [...new Set([...words, ...bigrams])];
-  const withSynonyms = new Set(all);
-  for (const w of all) {
-    for (const [key, syns] of Object.entries(SYNONYMS)) {
-      if (syns.includes(w) || key === w) syns.forEach(s => withSynonyms.add(s));
-    }
-  }
-  return [...withSynonyms];
-}
+export const CARRIERS = [
+  { key:'hormuud', name:'Hormuud', logo, trigger:'*712*', prefixes:['61','77'] },
+  { key:'somtel',  name:'Somtel',  logo, trigger:'*300#', prefixes:['62','65'] },
+  { key:'somnet',  name:'Somnet',  logo, trigger:'*825#', prefixes:['68'] },
+  { key:'amtel',   name:'Amtel',   logo, trigger:'*825#', prefixes:['71'] },
+];
 ```
+USSD flow steps-ka 4-da waxay ku jiraan `BUILTIN_FLOWS` gudaha `UssdFlowsClient.kt` (Somtel + Somnet horey ayaa loo dhigay; Hormuud + Amtel waa la dhammeystirayaa).
+`providers_config` wuxuu noqonayaa **global/shared** (lama beddelo reseller kasta) — reseller-ku wuxuu keliya beddelaa rate-yadiisa.
 
-## Self-Healing Loop (Android + DB)
-### Table cusub: `ussd_unmatched_dialogs`
-`(id, flow_id, step_order, dialog_text, device_id, matched, created_at)`
+### 5. Rate iyo Tiers reseller kasta
+`provider_wholesale_tiers` + `tenant_id` → reseller kasta wuxuu leeyahay tiers kiisa shirkad kasta.
+Table cusub `tenant_provider_rates` (tenant_id, provider_key, evoucher_rate) — rate default-ka shirkad kasta.
+Admin tab cusub **"Rates & Tiers"**: 4 card (shirkad kasta) → rate default + liis tiers ah oo la abuuri/beddeli karo.
 
-### Android `UssdAccessibilityService.kt` (tallaabo yar oo lagu darayo)
-Marka dialog uu soo muuqdo laakiin keywords-ka la hayo mid kalana ma matchin:
-- Log `dialog_text` to `ussd_unmatched_dialogs` via REST.
-- Fallback: si dabiici ah waxa uu isku dayaa **similarity match** (Levenshtein >70%) ka fully-loaded flow steps.
-- Haddii uu match sameeyo, wuxuu isticmaalaa iyo si automatic ah wuxuu ku darayaa keyword cusub `ussd_flow_steps` via RPC `learn_ussd_keyword(step_id, new_keyword)`.
+Xisaabta topup: `topup = amount * (1 + tier.profit_rate/100)` haddii tier la helo, haddii kale `amount * (1 + tenant_rate)`.
 
-### RPC cusub: `learn_ussd_keyword`
-```sql
-UPDATE ussd_flow_steps
-SET match_keywords = ARRAY(SELECT DISTINCT unnest(match_keywords || ARRAY[_kw]))
-WHERE id = _step_id;
-```
+### 6. Dalab automatic 100%
+`process-payment-receipt` wuxuu:
+1. Ka helayaa `tenant_id` SIM-ka receiver-ka (`android_devices.sim_number` → tenant).
+2. Ku xisaabinayaa rate/tier tenant-kaas.
+3. Toos ugu darayaa `delivery_queue` (status pending) — approve gacan lama rabo.
+Android-ka realtime ayuu ku qaadanayaa (horey loo dhigay).
 
-## Admin Dashboard tab cusub — "USSD Learning"
-Muujiya `ussd_unmatched_dialogs` liiska:
-- Admin wuu awoodi karo si gacan ah in uu step-ka mapkiisa u eego iyo keywords cusub uu ku daro (haddii self-healing-ku ku guuldareysto).
+### 7. Onboarding reseller
+Route cusub `/signup` → email/password → `tenants` row + `tenant_members(owner)` + 4 rate default.
+Onboarding wizard: (1) magaca ganacsiga (2) rate shirkad kasta (3) device pairing code.
 
-## Damaanadda 100%
-| Layer | Guarantee |
-|---|---|
-| Wizard Auto-Learn + Synonyms | ~85% keywords si sax ah loo helayo |
-| Test Live (SIM tijaabo) 0.01 | ~95% steps la hubinayo ka hor deployment |
-| Self-Healing (Android learn-as-you-go) | ~99% dialogs cusub automatic loo barano |
-| Admin USSD Learning tab | 100% — gacanta ayaa loo saxi karo wixii ka hadhay |
+## Faylasha
+**Cusub:** `src/config/carriers.ts`, `src/pages/Signup.tsx`, `src/pages/Onboarding.tsx`, `src/contexts/TenantContext.tsx`, `src/components/admin/RatesAndTiersManager.tsx`
+**Migration:** `tenants`, `tenant_members`, `tenant_provider_rates`, `tenant_id` + backfill + RLS dib-u-qoris, `current_tenant_id()`
+**Beddel:** `AdminSidebar.tsx`, `AdminDashboard.tsx`, `ProviderSelection.tsx`, `WholesaleTiersManager.tsx`, edge functions (`process-payment-receipt`, `register-device`, `activate-package`), `UssdFlowsClient.kt`
 
-## Faylasha la abuurayo / la beddelayo
-- **Cusub:** `src/components/admin/AddUssdProviderWizardDialog.tsx`
-- **Cusub:** `src/components/admin/UssdLearningDashboard.tsx`
-- **Cusub:** `src/lib/ussdSynonyms.ts`
-- **Migration:** table cusub `ussd_unmatched_dialogs` + RPC `learn_ussd_keyword`
-- **Beddel:** `UssdFlowsManager.tsx` — kudar button "➕ Wizard cusub"
-- **Beddel:** `AdminSidebar.tsx` — kudar tab "🧠 USSD Learning"
-- **Beddel:** `UssdAccessibilityService.kt` — kudar `logUnmatchedDialog()` + similarity fallback
-- **Beddel:** `UssdFlowsClient.kt` — kudar `learnKeyword(stepId, keyword)` REST helper
+## Habka aan u socono (maanta)
+Sababtoo ah tani waa isbeddel weyn oo database-ka oo dhan taabanaya, waxaan u qaybinayaa 3 qaybood oo isku xigxiga — mid kasta waa la tijaabin karaa ka hor inta aan tan xigta la bilaabin:
 
-## Wax aan la taabanayn
-- Somtel `*300#` flow-gii jiray (waa la ilaalinayaa).
-- Hormuud `*712*` EVC send money.
-- Package/Category/Wholesale Tier tabs — admin tabs-ka jira ayaa la isticmaalaa.
-- PIN hard-stop logic (siduu yahay ayaa loo dhaafayaa).
+1. **Qeyb 1 (maanta):** Migration tenants + tenant_id + RLS + backfill, `TenantContext`, signup/onboarding.
+2. **Qeyb 2:** `carriers.ts` hard-code + `RatesAndTiersManager` (rate & tiers reseller kasta).
+3. **Qeyb 3:** Edge functions + Android tenant-aware, dalab automatic 100%.
+
+## Digniin
+Xogta hadda jirta (orders, devices, flows) **lama tirtirayo** — waxaa lagu wareejinayaa tenant-ka koowaad ee "Iftin".
