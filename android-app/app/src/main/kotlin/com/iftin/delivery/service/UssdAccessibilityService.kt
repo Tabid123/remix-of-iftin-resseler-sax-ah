@@ -2435,12 +2435,24 @@ class UssdAccessibilityService : AccessibilityService() {
         )
     }
 
-    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String = text.orEmpty()
-        .let { raw -> if (transientValue.isNotBlank()) raw.replace(transientValue, "", ignoreCase = true) else raw }
-        .lowercase()
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .take(220)
+    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String {
+        val expected = transientValue.trim()
+        return text.orEmpty()
+            // extractDialogText separates accessibility nodes with " | ". Once the
+            // value is typed, the EditText adds a new segment. Remove that whole
+            // transient segment (not the same digits from the actual prompt), then
+            // rebuild the fingerprint so no empty "| |" delimiter causes a false
+            // stale-dialog mismatch and blocks Send forever.
+            .split('|')
+            .map { it.trim() }
+            .filter { segment -> expected.isBlank() || !segment.equals(expected, ignoreCase = true) }
+            .filter { it.isNotBlank() }
+            .joinToString(" | ")
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(220)
+    }
     
     /**
      * Send broadcast to notify UssdDialerService that we clicked a button
