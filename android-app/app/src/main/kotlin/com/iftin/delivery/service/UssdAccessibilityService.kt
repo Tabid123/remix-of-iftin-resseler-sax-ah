@@ -1542,9 +1542,14 @@ class UssdAccessibilityService : AccessibilityService() {
             s.order !in completedFlowSteps &&
                 !s.isPinField &&
                 completedFlowSteps.isNotEmpty() &&
-                !isMenuList &&
                 !looksLikePinDialog &&
-                hasVisibleEditableInput(root)
+                hasVisibleEditableInput(root) &&
+                // Numbered menus (incl. the final "1. Haa / 2. Maya" confirmation)
+                // may be auto-answered ONLY when the pending step is a short menu
+                // selection like "1" or "2" — never free text such as a phone number.
+                (!isMenuList || s.responseTemplate.trim().trim('{', '}').let { t ->
+                    t.isNotEmpty() && t.length <= 2 && t.all(Char::isDigit)
+                })
         }?.also { fallbackStep ->
             Log.w(
                 TAG,
