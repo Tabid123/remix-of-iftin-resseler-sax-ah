@@ -433,7 +433,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 pinSubmittedForSession = true
                 submitCount++
                 Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
-                clickSendOrOkButton(rt)
+                clickSendOrOkButton(rt, requiredCommittedValue = expected)
             } finally {
                 rt.recycle()
                 scheduledSubmitRunnable = null
@@ -633,7 +633,17 @@ class UssdAccessibilityService : AccessibilityService() {
         fun walk(node: AccessibilityNodeInfo) {
             try {
                 val className = node.className?.toString().orEmpty()
-                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable
+                // Some Samsung/carrier USSD widgets expose a generic View instead
+                // of EditText, but still advertise ACTION_SET_TEXT/ACTION_PASTE.
+                // Treat those as real inputs so an input dialog can never be
+                // mistaken for an OK-only terminal result.
+                val supportsTextAction = try {
+                    node.actionList.any {
+                        it.id == AccessibilityNodeInfo.ACTION_SET_TEXT ||
+                            it.id == AccessibilityNodeInfo.ACTION_PASTE
+                    }
+                } catch (_: Exception) { false }
+                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable || supportsTextAction
                 if (isEditableNode) {
                     val bounds = Rect().also { node.getBoundsInScreen(it) }
                     val visible = node.isVisibleToUser && bounds.width() > 0 && bounds.height() > 0 && Rect.intersects(bounds, screenBounds)
@@ -646,7 +656,7 @@ class UssdAccessibilityService : AccessibilityService() {
                                 bounds = bounds,
                                 isFocused = node.isFocused,
                                 isAccessibilityFocused = node.isAccessibilityFocused,
-                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true),
+                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true) || supportsTextAction,
                                 isEnabled = node.isEnabled,
                                 isVisible = visible,
                                 existingTextLength = node.text?.length ?: 0,
@@ -1384,7 +1394,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 val dismissed = clickTerminalDismissButton(source)
                 Log.i(TAG, "🏁 Terminal USSD result dialog handled (dismissed=$dismissed)")
-                resetSessionState("terminal_result_dialog")
+                if (dismissed) {
+                    resetSessionState("terminal_result_dialog")
+                } else {
+                    retryTerminalDismiss(attempt = 1)
+                }
                 source.recycle()
                 return
             }
@@ -1426,8 +1440,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // Search for clickable buttons with confirm text
+            // Search only for dismiss/continuation buttons here. Submit buttons such
+            // as Send/Confirm are owned exclusively by the verified flow scheduler;
+            // allowing this generic event path to click them can submit an empty field.
             for (buttonText in CONFIRM_BUTTONS) {
+                if (isSubmitButtonLabel(buttonText)) continue
                 val nodes = source.findAccessibilityNodeInfosByText(buttonText)
                 
                 for (node in nodes) {
@@ -1682,6 +1699,7 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.w(TAG, "⚠️ Flow step matched but no EditText to type into")
             return false
         }
+        val originDialogFingerprint = dialogFingerprintFor(dialogText, response)
 
         var typed = false
         try {
@@ -1757,6 +1775,11 @@ class UssdAccessibilityService : AccessibilityService() {
             try {
                 // Never press Send while the dialog input is still empty — carriers
                 // answer "Input required. Try again" and the whole order dies.
+                val liveDialogText = extractDialogText(rt)
+                if (dialogFingerprintFor(liveDialogText, response) != originDialogFingerprint) {
+                    Log.i(TAG, "🛑 Skipping stale Send — carrier dialog changed before step ${step.order} submit")
+                    return@Runnable
+                }
                 if (!isValueCommittedInActiveField(rt, response)) {
                     submitAttempt++
                     if (submitAttempt <= 3) {
@@ -1771,7 +1794,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 submitCount++
                 Log.d(TAG, "📨 Non-PIN flow submit step=${step.order} submitCount=$submitCount")
-                clickSendOrOkButton(rt)
+                clickSendOrOkButton(rt, requiredCommittedValue = response)
             } finally {
                 if (!rescheduled) { try { rt.recycle() } catch (_: Exception) {} } else { try { rt.recycle() } catch (_: Exception) {} }
             }
@@ -1950,6 +1973,17 @@ class UssdAccessibilityService : AccessibilityService() {
                             try { node.recycle() } catch (_: Exception) {}
                             return true
                         }
+                        val parent = try { node.parent } catch (_: Exception) { null }
+                        try {
+                            if (parent?.isClickable == true && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                                Log.d(TAG, "✅ Terminal dialog dismissed via parent of '$label'")
+                                nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
+                                try { node.recycle() } catch (_: Exception) {}
+                                return true
+                            }
+                        } finally {
+                            try { parent?.recycle() } catch (_: Exception) {}
+                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -1977,6 +2011,32 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    /** Retry OK dismissal against a fresh node tree; carrier result dialogs often
+     * replace their button node shortly after appearing, making the first node stale. */
+    private fun retryTerminalDismiss(attempt: Int) {
+        if (attempt > 4) {
+            Log.e(TAG, "❌ Terminal result saved, but OK could not be dismissed after retries")
+            return
+        }
+        handler.postDelayed({
+            val freshRoot = rootInActiveWindow ?: return@postDelayed
+            try {
+                if (!isRealUssdDialog(freshRoot)) return@postDelayed
+                val freshText = extractDialogText(freshRoot)
+                if (!isTerminalResultDialog(freshRoot, freshText)) return@postDelayed
+                if (!freshText.isNullOrBlank()) saveUssdResponse(freshText, isFinal = true)
+                if (clickTerminalDismissButton(freshRoot)) {
+                    Log.i(TAG, "✅ Terminal OK dismissed on retry $attempt")
+                    resetSessionState("terminal_result_retry_$attempt")
+                } else {
+                    retryTerminalDismiss(attempt + 1)
+                }
+            } finally {
+                try { freshRoot.recycle() } catch (_: Exception) {}
+            }
+        }, 700L * attempt)
     }
 
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
@@ -2090,8 +2150,27 @@ class UssdAccessibilityService : AccessibilityService() {
         
         multiDialogRunnable = Runnable {
             Log.d(TAG, "🏁 Multi-dialog listener ended. Total clicks: $clickCount")
+
+            // Last-chance terminal capture. Some carrier/OEM dialogs expose their
+            // final OK button only after the last content-change event, so no new
+            // accessibility event arrives for the normal terminal handler.
+            val freshRoot = rootInActiveWindow
+            if (freshRoot != null) {
+                try {
+                    val finalText = extractDialogText(freshRoot)
+                    if (isRealUssdDialog(freshRoot) && isTerminalResultDialog(freshRoot, finalText)) {
+                        if (!finalText.isNullOrBlank()) saveUssdResponse(finalText, isFinal = true)
+                        if (clickTerminalDismissButton(freshRoot)) {
+                            Log.i(TAG, "✅ Captured and dismissed terminal OK at listener timeout")
+                        }
+                    }
+                } finally {
+                    try { freshRoot.recycle() } catch (_: Exception) {}
+                }
+            }
             
             // Reset click count for next session
+            val totalClicks = clickCount
             clickCount = 0
             
             // Reset expecting flag
@@ -2103,7 +2182,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Send final completion broadcast with package name for Android 13+
             sendBroadcast(Intent(ACTION_USSD_CLICK_COMPLETE).apply {
                 setPackage("com.iftin.delivery")
-                putExtra("total_clicks", clickCount)
+                putExtra("total_clicks", totalClicks)
                 putExtra("success", true)
             })
         }
@@ -2288,12 +2367,19 @@ class UssdAccessibilityService : AccessibilityService() {
     /**
      * Click Send/OK button after entering PIN
      */
-    private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
+    private fun clickSendOrOkButton(root: AccessibilityNodeInfo, requiredCommittedValue: String) {
         try {
             val dialogText = extractDialogText(root)
             if (shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 engagePinHardStop(dialogText)
                 Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
+                return
+            }
+            // Absolute last-mile invariant: this method may submit only the exact
+            // value requested by the current flow step. ACTION_SET_TEXT returning
+            // true is insufficient; some carrier dialogs re-render and clear it.
+            if (requiredCommittedValue.isBlank() || !isValueCommittedInActiveField(root, requiredCommittedValue)) {
+                Log.e(TAG, "🛑 Send blocked — required value is not committed in the live input field")
                 return
             }
             if (shouldSuppressAutoClickForDialog(root, dialogText)) {
@@ -2332,6 +2418,21 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.e(TAG, "❌ Error clicking send after PIN: ${e.message}")
         }
     }
+
+    private fun isSubmitButtonLabel(label: String): Boolean {
+        val normalized = label.trim().lowercase()
+        return normalized in setOf(
+            "send", "dir", "soo dir", "submit", "confirm", "yes", "haa",
+            "cancel", "next", "continue", "accept", "agree", "ogolow", "sii wad"
+        )
+    }
+
+    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String = text.orEmpty()
+        .let { raw -> if (transientValue.isNotBlank()) raw.replace(transientValue, "", ignoreCase = true) else raw }
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(220)
     
     /**
      * Send broadcast to notify UssdDialerService that we clicked a button
