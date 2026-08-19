@@ -1370,6 +1370,7 @@ class UssdDialerService : Service() {
                 .edit()
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                 .apply()
             
             // 500ms settle time before USSD
@@ -1630,6 +1631,7 @@ class UssdDialerService : Service() {
                     prefs.edit()
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                        .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                         .apply()
 
                     // Attach PIN diagnostic snapshot if carrier rejected PIN — surfaces
