@@ -433,7 +433,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 pinSubmittedForSession = true
                 submitCount++
                 Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
-                clickSendOrOkButton(rt, requiredCommittedValue = expected)
+                clickSendOrOkButton(rt)
             } finally {
                 rt.recycle()
                 scheduledSubmitRunnable = null
@@ -466,102 +466,18 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun isValueCommittedInActiveField(root: AccessibilityNodeInfo, expected: String): Boolean {
         if (expected.isBlank()) return false
         val candidates = collectEditableFieldCandidates(root)
-        val matched = try {
-            // Some carrier dialogs expose both the real EditText and a second hidden
-            // accessibility EditText. Selecting only one "best" candidate can pick
-            // the empty mirror even though the visible field contains the exact value,
-            // which permanently blocks Send. Trust any visible/enabled editable that
-            // contains the exact expected value (or a same-length masked PIN).
-            candidates.any { candidate ->
-                if (!candidate.isVisible || !candidate.isEnabled || !candidate.isEditable) {
-                    false
-                } else {
-                    try { candidate.node.refresh() } catch (_: Exception) {}
-                    val actual = candidate.node.text?.toString()?.trim().orEmpty()
-                    val maskedValue = actual.length == expected.length &&
-                        actual.all { it == '•' || it == '*' }
-                    actual == expected || maskedValue
-                }
-            }
-        } finally {
-            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
-        }
-        if (matched) return true
-        // Last resort: some carrier dialogs (e.g. Jeeb) render the typed value in a
-        // node that is no longer reported as editable/enabled. If the value is
-        // clearly visible anywhere on the dialog, treat it as committed so Send
-        // is never blocked forever.
-        return screenShowsValue(root, expected)
-    }
-
-    /**
-     * Strict check for numbered confirmation prompts. The prompt itself contains
-     * "1. Haa", so the generic screenShowsValue fallback would incorrectly treat
-     * that menu label as typed input. Only a real editable field counts here.
-     */
-    private fun isValueCommittedInEditableField(root: AccessibilityNodeInfo, expected: String): Boolean {
-        if (expected.isBlank()) return false
-        val candidates = collectEditableFieldCandidates(root)
         return try {
-            candidates.any { candidate ->
-                if (!candidate.isVisible || !candidate.isEnabled || !candidate.isEditable) {
-                    false
-                } else {
-                    try { candidate.node.refresh() } catch (_: Exception) {}
-                    candidate.node.text?.toString()?.trim() == expected
-                }
-            }
+            val best = selectBestEditableCandidate(candidates) ?: return false
+            try { best.node.refresh() } catch (_: Exception) {}
+            val actual = best.node.text?.toString()?.trim().orEmpty()
+            val maskedValue = actual.length == expected.length && actual.all { it == '•' || it == '*' }
+            // Only trust the selected EditText itself. A masked string elsewhere in
+            // the window (debug overlay, stale node, another field) must never unlock
+            // Send while the active PIN field is empty.
+            actual == expected || maskedValue
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
-    }
-
-    /** True when the carrier dialog exposes at least one visible input containing data. */
-    private fun hasEnteredInputValue(root: AccessibilityNodeInfo): Boolean {
-        val candidates = collectEditableFieldCandidates(root)
-        return try {
-            candidates.any { candidate ->
-                candidate.isVisible && candidate.isEnabled && candidate.isEditable &&
-                    try {
-                        candidate.node.refresh()
-                        !candidate.node.text?.toString()?.trim().isNullOrEmpty()
-                    } catch (_: Exception) {
-                        candidate.existingTextLength > 0
-                    }
-            }
-        } finally {
-            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
-        }
-    }
-
-    /** True when [expected] is visible as text somewhere in the dialog tree (non-button node). */
-    private fun screenShowsValue(root: AccessibilityNodeInfo, expected: String): Boolean {
-        val target = expected.trim()
-        if (target.isBlank()) return false
-        var found = false
-        fun walk(node: AccessibilityNodeInfo?) {
-            if (node == null || found) return
-            try {
-                val className = node.className?.toString().orEmpty()
-                val isButton = className.contains("Button", ignoreCase = true)
-                val text = node.text?.toString()?.trim().orEmpty()
-                if (!isButton && text.isNotEmpty()) {
-                    val masked = text.length == target.length && text.all { it == '•' || it == '*' }
-                    if (text == target || masked) {
-                        found = true
-                        return
-                    }
-                }
-                for (i in 0 until node.childCount) {
-                    val child = node.getChild(i) ?: continue
-                    walk(child)
-                    try { child.recycle() } catch (_: Exception) {}
-                    if (found) return
-                }
-            } catch (_: Exception) {}
-        }
-        walk(root)
-        return found
     }
 
     /**
@@ -717,17 +633,7 @@ class UssdAccessibilityService : AccessibilityService() {
         fun walk(node: AccessibilityNodeInfo) {
             try {
                 val className = node.className?.toString().orEmpty()
-                // Some Samsung/carrier USSD widgets expose a generic View instead
-                // of EditText, but still advertise ACTION_SET_TEXT/ACTION_PASTE.
-                // Treat those as real inputs so an input dialog can never be
-                // mistaken for an OK-only terminal result.
-                val supportsTextAction = try {
-                    node.actionList.any {
-                        it.id == AccessibilityNodeInfo.ACTION_SET_TEXT ||
-                            it.id == AccessibilityNodeInfo.ACTION_PASTE
-                    }
-                } catch (_: Exception) { false }
-                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable || supportsTextAction
+                val isEditableNode = className.contains("EditText", ignoreCase = true) || node.isEditable
                 if (isEditableNode) {
                     val bounds = Rect().also { node.getBoundsInScreen(it) }
                     val visible = node.isVisibleToUser && bounds.width() > 0 && bounds.height() > 0 && Rect.intersects(bounds, screenBounds)
@@ -740,7 +646,7 @@ class UssdAccessibilityService : AccessibilityService() {
                                 bounds = bounds,
                                 isFocused = node.isFocused,
                                 isAccessibilityFocused = node.isAccessibilityFocused,
-                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true) || supportsTextAction,
+                                isEditable = node.isEditable || className.contains("EditText", ignoreCase = true),
                                 isEnabled = node.isEnabled,
                                 isVisible = visible,
                                 existingTextLength = node.text?.length ?: 0,
@@ -1478,11 +1384,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 val dismissed = clickTerminalDismissButton(source)
                 Log.i(TAG, "🏁 Terminal USSD result dialog handled (dismissed=$dismissed)")
-                if (dismissed) {
-                    resetSessionState("terminal_result_dialog")
-                } else {
-                    retryTerminalDismiss(attempt = 1)
-                }
+                resetSessionState("terminal_result_dialog")
                 source.recycle()
                 return
             }
@@ -1524,11 +1426,8 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // Search only for dismiss/continuation buttons here. Submit buttons such
-            // as Send/Confirm are owned exclusively by the verified flow scheduler;
-            // allowing this generic event path to click them can submit an empty field.
+            // Search for clickable buttons with confirm text
             for (buttonText in CONFIRM_BUTTONS) {
-                if (isSubmitButtonLabel(buttonText)) continue
                 val nodes = source.findAccessibilityNodeInfosByText(buttonText)
                 
                 for (node in nodes) {
@@ -1632,8 +1531,6 @@ class UssdAccessibilityService : AccessibilityService() {
         // Numbered menu lists (e.g. "1. Reseller  2. Transfer  5. Change Password")
         // contain the word "password"/"pin" as option labels — they are NOT PIN prompts.
         val isMenuList = looksLikeNumberedMenu(dialogText)
-        val isYesNoConfirmation =
-            (lower.contains("haa") && lower.contains("maya")) || lower.contains("ma hubtaa") || lower.contains("mu hubtaa")
         // Carrier rejected the PIN (empty/partial write). Reset PIN session state so
         // the same PIN step can be re-entered cleanly instead of being skipped.
         val isInvalidPinPrompt = !isMenuList && (
@@ -1657,14 +1554,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 lower.contains("password") ||
                 lower.contains("furaha")
         )
-        val matchedStep = (if (isYesNoConfirmation) {
-            // The final Somnet screen must always answer 1 (Haa). Prefer the
-            // configured pending confirmation step even if carrier wording varies.
-            flow.steps.firstOrNull { s ->
-                s.order !in completedFlowSteps && !s.isPinField &&
-                    s.responseTemplate.trim().trim('{', '}') == "1"
-            }
-        } else null) ?: flow.steps.firstOrNull { s ->
+        val matchedStep = flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
@@ -1792,14 +1682,11 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.w(TAG, "⚠️ Flow step matched but no EditText to type into")
             return false
         }
-        val originDialogFingerprint = dialogFingerprintFor(dialogText, response)
 
         var typed = false
         try {
             for (et in edits) {
-                // A real click is required on Samsung USSD widgets to establish
-                // the input connection before ACTION_SET_TEXT can commit "1".
-                focusEditableField(et)
+                et.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 // Clear existing text first to prevent appending
                 val clearArgs = android.os.Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
@@ -1870,19 +1757,7 @@ class UssdAccessibilityService : AccessibilityService() {
             try {
                 // Never press Send while the dialog input is still empty — carriers
                 // answer "Input required. Try again" and the whole order dies.
-                val liveDialogText = extractDialogText(rt)
-                if (dialogFingerprintFor(liveDialogText, response) != originDialogFingerprint) {
-                    Log.i(TAG, "🛑 Skipping stale Send — carrier dialog changed before step ${step.order} submit")
-                    return@Runnable
-                }
-                // On "1. Haa / 2. Maya", never accept the visible menu label "1"
-                // as proof that input was entered. Require the editable field itself.
-                val committed = if (isYesNoConfirmation) {
-                    isValueCommittedInEditableField(rt, response)
-                } else {
-                    isValueCommittedInActiveField(rt, response)
-                }
-                if (!committed) {
+                if (!isValueCommittedInActiveField(rt, response)) {
                     submitAttempt++
                     if (submitAttempt <= 3) {
                         Log.w(TAG, "⏳ Field not committed yet (attempt $submitAttempt) — retyping '$response' and waiting")
@@ -1896,7 +1771,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 submitCount++
                 Log.d(TAG, "📨 Non-PIN flow submit step=${step.order} submitCount=$submitCount")
-                clickSendOrOkButton(rt, requiredCommittedValue = response)
+                clickSendOrOkButton(rt)
             } finally {
                 if (!rescheduled) { try { rt.recycle() } catch (_: Exception) {} } else { try { rt.recycle() } catch (_: Exception) {} }
             }
@@ -2075,17 +1950,6 @@ class UssdAccessibilityService : AccessibilityService() {
                             try { node.recycle() } catch (_: Exception) {}
                             return true
                         }
-                        val parent = try { node.parent } catch (_: Exception) { null }
-                        try {
-                            if (parent?.isClickable == true && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                                Log.d(TAG, "✅ Terminal dialog dismissed via parent of '$label'")
-                                nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
-                                try { node.recycle() } catch (_: Exception) {}
-                                return true
-                            }
-                        } finally {
-                            try { parent?.recycle() } catch (_: Exception) {}
-                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -2113,32 +1977,6 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
         return false
-    }
-
-    /** Retry OK dismissal against a fresh node tree; carrier result dialogs often
-     * replace their button node shortly after appearing, making the first node stale. */
-    private fun retryTerminalDismiss(attempt: Int) {
-        if (attempt > 4) {
-            Log.e(TAG, "❌ Terminal result saved, but OK could not be dismissed after retries")
-            return
-        }
-        handler.postDelayed({
-            val freshRoot = rootInActiveWindow ?: return@postDelayed
-            try {
-                if (!isRealUssdDialog(freshRoot)) return@postDelayed
-                val freshText = extractDialogText(freshRoot)
-                if (!isTerminalResultDialog(freshRoot, freshText)) return@postDelayed
-                if (!freshText.isNullOrBlank()) saveUssdResponse(freshText, isFinal = true)
-                if (clickTerminalDismissButton(freshRoot)) {
-                    Log.i(TAG, "✅ Terminal OK dismissed on retry $attempt")
-                    resetSessionState("terminal_result_retry_$attempt")
-                } else {
-                    retryTerminalDismiss(attempt + 1)
-                }
-            } finally {
-                try { freshRoot.recycle() } catch (_: Exception) {}
-            }
-        }, 700L * attempt)
     }
 
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
@@ -2252,27 +2090,8 @@ class UssdAccessibilityService : AccessibilityService() {
         
         multiDialogRunnable = Runnable {
             Log.d(TAG, "🏁 Multi-dialog listener ended. Total clicks: $clickCount")
-
-            // Last-chance terminal capture. Some carrier/OEM dialogs expose their
-            // final OK button only after the last content-change event, so no new
-            // accessibility event arrives for the normal terminal handler.
-            val freshRoot = rootInActiveWindow
-            if (freshRoot != null) {
-                try {
-                    val finalText = extractDialogText(freshRoot)
-                    if (isRealUssdDialog(freshRoot) && isTerminalResultDialog(freshRoot, finalText)) {
-                        if (!finalText.isNullOrBlank()) saveUssdResponse(finalText, isFinal = true)
-                        if (clickTerminalDismissButton(freshRoot)) {
-                            Log.i(TAG, "✅ Captured and dismissed terminal OK at listener timeout")
-                        }
-                    }
-                } finally {
-                    try { freshRoot.recycle() } catch (_: Exception) {}
-                }
-            }
             
             // Reset click count for next session
-            val totalClicks = clickCount
             clickCount = 0
             
             // Reset expecting flag
@@ -2284,7 +2103,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Send final completion broadcast with package name for Android 13+
             sendBroadcast(Intent(ACTION_USSD_CLICK_COMPLETE).apply {
                 setPackage("com.iftin.delivery")
-                putExtra("total_clicks", totalClicks)
+                putExtra("total_clicks", clickCount)
                 putExtra("success", true)
             })
         }
@@ -2387,17 +2206,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun shouldSuppressAutoClickForDialog(
-        root: AccessibilityNodeInfo,
-        dialogText: String?,
-        committedValue: String? = null
-    ): Boolean {
-        // Once any visible input contains data, Send must not be held by the generic
-        // PIN/menu guards. The flow scheduler owns the value that was just entered.
-        val valueAlreadyCommitted = hasEnteredInputValue(root) ||
-            (!committedValue.isNullOrBlank() && isValueCommittedInActiveField(root, committedValue))
-        if (valueAlreadyCommitted) return false
-
+    private fun shouldSuppressAutoClickForDialog(root: AccessibilityNodeInfo, dialogText: String?): Boolean {
         if (shouldHardStopForPinStage(root, dialogText)) {
             return true
         }
@@ -2452,9 +2261,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 2. Carrier dialogs can expose a filled real field plus an empty hidden mirror.
-        //    Block only when every editable is empty; one committed field is sufficient.
-        if (hasEmptyEditableInput && !hasFilledEditableInput) {
+        // 2. If the dialog still has an empty input box, refuse to click Send/OK —
+        //    something must be typed first (either by a dynamic flow step or the user).
+        if (hasEmptyEditableInput) {
             Log.i(TAG, "🛑 Suppressing auto-click — dialog has empty input field (would trigger 'Input required')")
             return true
         }
@@ -2479,24 +2288,15 @@ class UssdAccessibilityService : AccessibilityService() {
     /**
      * Click Send/OK button after entering PIN
      */
-    private fun clickSendOrOkButton(root: AccessibilityNodeInfo, requiredCommittedValue: String) {
+    private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
         try {
             val dialogText = extractDialogText(root)
-            val hasEnteredData = hasEnteredInputValue(root) ||
-                (requiredCommittedValue.isNotBlank() &&
-                    isValueCommittedInActiveField(root, requiredCommittedValue))
-            if (!hasEnteredData && shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
+            if (shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 engagePinHardStop(dialogText)
                 Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
                 return
             }
-            // Keep empty dialogs protected, but do not require carrier-specific
-            // accessibility widgets to expose the exact value before clicking Send.
-            if (!hasEnteredData) {
-                Log.e(TAG, "🛑 Send blocked — dialog input is still empty")
-                return
-            }
-            if (shouldSuppressAutoClickForDialog(root, dialogText, requiredCommittedValue)) {
+            if (shouldSuppressAutoClickForDialog(root, dialogText)) {
                 Log.i(TAG, "✋ clickSendOrOkButton suppressed — editable dialog awaiting manual action")
                 return
             }
@@ -2531,33 +2331,6 @@ class UssdAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error clicking send after PIN: ${e.message}")
         }
-    }
-
-    private fun isSubmitButtonLabel(label: String): Boolean {
-        val normalized = label.trim().lowercase()
-        return normalized in setOf(
-            "send", "dir", "soo dir", "submit", "confirm", "yes", "haa",
-            "cancel", "next", "continue", "accept", "agree", "ogolow", "sii wad"
-        )
-    }
-
-    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String {
-        val expected = transientValue.trim()
-        return text.orEmpty()
-            // extractDialogText separates accessibility nodes with " | ". Once the
-            // value is typed, the EditText adds a new segment. Remove that whole
-            // transient segment (not the same digits from the actual prompt), then
-            // rebuild the fingerprint so no empty "| |" delimiter causes a false
-            // stale-dialog mismatch and blocks Send forever.
-            .split('|')
-            .map { it.trim() }
-            .filter { segment -> expected.isBlank() || !segment.equals(expected, ignoreCase = true) }
-            .filter { it.isNotBlank() }
-            .joinToString(" | ")
-            .lowercase()
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .take(220)
     }
     
     /**

@@ -1370,8 +1370,6 @@ class UssdDialerService : Service() {
                 .edit()
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                 .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
-                .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE)
-                .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME)
                 .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                 .apply()
             
@@ -1423,7 +1421,7 @@ class UssdDialerService : Service() {
             if (dialSuccess) {
                 val dialStartedAt = System.currentTimeMillis()
                 // Get the captured USSD response from AccessibilityService
-                var ussdResponse = getLastUssdResponse(requireFinal = !isSingleStep)
+                var ussdResponse = getLastUssdResponse()
                 var resultFromSms = false
                 if (ussdResponse.isNullOrBlank()) {
                     android.util.Log.d("UssdDialer", "🔎 No dialog result — waiting for confirmation SMS...")
@@ -1731,7 +1729,7 @@ class UssdDialerService : Service() {
         return inputMarkers.any { lower.contains(it) } || hasSendPair
     }
 
-    private suspend fun getLastUssdResponse(requireFinal: Boolean = false): String? {
+    private suspend fun getLastUssdResponse(): String? {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
             
@@ -1739,9 +1737,9 @@ class UssdDialerService : Service() {
             android.util.Log.d("UssdDialer", "⏳ Waiting for USSD response capture...")
             delay(1500)
 
-            // Interactive flows can take substantially longer than a single USSD
-            // request. Wait up to ~45s for their authoritative OK-only final dialog.
-            val maxAttempts = if (requireFinal) 75 else 22
+            // Poll for up to ~12s so the real provider result (not an intermediate
+            // dialog) is what gets reported back for the order.
+            val maxAttempts = 22
             repeat(maxAttempts) { attempt ->
                 // The LAST dialog (OK-only, no input field) is the authoritative
                 // carrier result — prefer it over intermediate menu text.
@@ -1753,12 +1751,6 @@ class UssdDialerService : Service() {
                 // An intermediate input dialog ("Fadlan Geli Mobile-ka | Cancel | Send")
                 // is NOT a result. Keep polling for the real OK-only carrier reply and
                 // only give up near the end of the window.
-                if (requireFinal && !useFinal) {
-                    // Never report a menu/input prompt as a delivered result. The
-                    // terminal dialog (or matched confirmation SMS) is authoritative.
-                    delay(600)
-                    return@repeat
-                }
                 if (!useFinal && isIntermediateDialogText(response) && attempt < maxAttempts - 3) {
                     delay(600)
                     return@repeat
