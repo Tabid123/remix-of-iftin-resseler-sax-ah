@@ -1711,6 +1711,24 @@ class UssdDialerService : Service() {
         return t.length < 6
     }
 
+    /**
+     * True when the captured text is an intermediate USSD *input* dialog
+     * (asks for a number/amount/PIN and shows Cancel|Send) rather than the
+     * carrier's final result message.
+     */
+    private fun isIntermediateDialogText(text: String?): Boolean {
+        val t = text?.trim().orEmpty()
+        if (t.isBlank()) return false
+        val lower = t.lowercase()
+        val inputMarkers = listOf(
+            "fadlan geli", "fadlan hubi", "geli mobile", "geli mobilka", "hubi mobilka",
+            "geli lacagta", "geli pin", "enter pin", "enter amount", "enter number",
+            "geli taleefan", "geli lambar"
+        )
+        val hasSendPair = lower.contains("send") && lower.contains("cancel")
+        return inputMarkers.any { lower.contains(it) } || hasSendPair
+    }
+
     private suspend fun getLastUssdResponse(): String? {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -1730,6 +1748,13 @@ class UssdDialerService : Service() {
                 val useFinal = !finalDialog.isNullOrBlank() && System.currentTimeMillis() - finalTime < 30000
                 val response = if (useFinal) finalDialog
                     else prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                // An intermediate input dialog ("Fadlan Geli Mobile-ka | Cancel | Send")
+                // is NOT a result. Keep polling for the real OK-only carrier reply and
+                // only give up near the end of the window.
+                if (!useFinal && isIntermediateDialogText(response) && attempt < maxAttempts - 3) {
+                    delay(600)
+                    return@repeat
+                }
                 if (isJunkUssdText(response)) {
                     // "USSD code running…" toasts / launcher noise are NOT results.
                     prefs.edit()
@@ -1758,7 +1783,7 @@ class UssdDialerService : Service() {
                     val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
                     val finalText = when {
                         !newerFinal.isNullOrBlank() && !isJunkUssdText(newerFinal) -> newerFinal
-                        !newer.isNullOrBlank() && !isJunkUssdText(newer) -> newer
+                        !newer.isNullOrBlank() && !isJunkUssdText(newer) && !isIntermediateDialogText(newer) -> newer
                         else -> response
                     }
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")

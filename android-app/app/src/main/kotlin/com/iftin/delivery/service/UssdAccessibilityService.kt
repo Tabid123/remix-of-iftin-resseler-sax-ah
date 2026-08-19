@@ -233,8 +233,8 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var ignoredEventCount = 0
 
     // ===== PIN HUD OVERLAY =====
-    // Visible system overlay that shows live PIN-write state on top of the USSD
-    // dialog so the user can see exactly what was typed without adb logcat.
+    // Debug-only overlay. Permanently disabled in production builds.
+    private val HUD_ENABLED = false
     private var hudView: TextView? = null
     private var hudAttached = false
     private val hudDismissRunnable = Runnable { hidePinHud() }
@@ -244,6 +244,12 @@ class UssdAccessibilityService : AccessibilityService() {
     @Volatile private var lastHudError: String = ""
 
     private fun showPinHud(status: String, expected: String, actual: String, method: String, extra: String = "") {
+        // HUD DISABLED: the yellow "PIN DEBUG" overlay must never be visible to users.
+        // Diagnostics are still written to logcat / SharedPreferences elsewhere.
+        if (!HUD_ENABLED) {
+            hidePinHud()
+            return
+        }
         try {
             val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
             val maskedActual = if (actual.isEmpty()) "<empty>" else actual
@@ -1368,6 +1374,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source))
             }
 
+            // ===== TERMINAL RESULT DIALOG =====
+            // No editable field => carrier is only showing the outcome. Store it as
+            // the authoritative FINAL result and dismiss it with OK/Close so the
+            // session ends cleanly (no lingering dialog, no stale intermediate text).
+            if (isTerminalResultDialog(source)) {
+                if (!dialogText.isNullOrBlank()) {
+                    saveUssdResponse(dialogText, isFinal = true)
+                }
+                val dismissed = clickTerminalDismissButton(source)
+                Log.i(TAG, "🏁 Terminal USSD result dialog handled (dismissed=$dismissed)")
+                resetSessionState("terminal_result_dialog")
+                source.recycle()
+                return
+            }
+
             val hardStopRoot = rootInActiveWindow ?: source
             if (shouldHardStopForPinStage(hardStopRoot, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 if (!dialogText.isNullOrBlank()) {
@@ -1865,7 +1886,53 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Dismiss a terminal USSD result dialog by pressing OK / Close / Haye.
+     * Never presses Cancel-like buttons first, and falls back to the standard
+     * android:id/button1 positive button when the label is unknown.
+     */
+    private fun clickTerminalDismissButton(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        val labels = listOf(
+            "OK", "Ok", "ok", "OKAY", "Okay", "okay",
+            "Close", "close", "CLOSE",
+            "Dismiss", "dismiss", "DISMISS",
+            "Done", "done", "DONE",
+            "Haye", "haye", "HAYE", "Haa", "haa", "HAA", "Hagaag", "hagaag"
+        )
+        for (label in labels) {
+            val nodes = try { root.findAccessibilityNodeInfosByText(label) } catch (_: Exception) { null } ?: continue
+            for (node in nodes) {
+                try {
+                    if (isClickableButton(node)) {
+                        if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            Log.d(TAG, "✅ Terminal dialog dismissed via '$label'")
+                            nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
+                            try { node.recycle() } catch (_: Exception) {}
+                            return true
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+            nodes.forEach { n -> try { n.recycle() } catch (_: Exception) {} }
+        }
+        // Fallback: the AlertDialog positive button
+        val positive = try {
+            root.findAccessibilityNodeInfosByViewId("android:id/button1")?.firstOrNull()
+        } catch (_: Exception) { null }
+        if (positive != null) {
+            val ok = try { positive.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+            try { positive.recycle() } catch (_: Exception) {}
+            if (ok) {
+                Log.d(TAG, "✅ Terminal dialog dismissed via android:id/button1")
+                return true
+            }
+        }
+        return false
+    }
+
     private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
+        // (see clickTerminalDismissButton below for terminal dialog handling)
         try {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
