@@ -1816,6 +1816,55 @@ class UssdAccessibilityService : AccessibilityService() {
      * reply produced garbage delivery notes ("Google Search | Play Store | Camera ...").
      */
     private fun looksLikeUssdResponse(text: String): Boolean {
+        return isPlausibleUssdText(text)
+    }
+
+    /**
+     * True only when the active window really is a carrier USSD dialog
+     * (AlertDialog with a message + OK/Send buttons), NOT the dialer keypad,
+     * the in-call screen, or the launcher.
+     */
+    private fun isRealUssdDialog(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        var hasDialogMarker = false
+        var hasDialpadMarker = false
+
+        fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || depth > 25 || hasDialogMarker && hasDialpadMarker) return
+            val viewId = try { node.viewIdResourceName.orEmpty() } catch (_: Exception) { "" }
+            val cls = node.className?.toString().orEmpty()
+            val idTail = viewId.substringAfterLast('/')
+
+            if (viewId.startsWith("android:id/") &&
+                (idTail == "message" || idTail == "alertTitle" || idTail == "button1" ||
+                    idTail == "button2" || idTail == "custom" || idTail == "parentPanel")
+            ) {
+                hasDialogMarker = true
+            }
+            if (cls.contains("AlertDialog", ignoreCase = true) || cls.contains("Dialog", ignoreCase = true)) {
+                hasDialogMarker = true
+            }
+            if (idTail.isNotBlank() && DIALPAD_ID_MARKERS.any { idTail.equals(it, ignoreCase = true) }) {
+                hasDialpadMarker = true
+            }
+
+            for (i in 0 until node.childCount) {
+                walk(node.getChild(i), depth + 1)
+            }
+        }
+
+        try { walk(root, 0) } catch (e: Exception) {
+            Log.w(TAG, "isRealUssdDialog walk error: ${e.message}")
+        }
+
+        if (!hasDialogMarker) {
+            Log.d(TAG, "🔍 Window has no dialog markers (dialpad=$hasDialpadMarker)")
+            return false
+        }
+        return true
+    }
+
+    private fun isPlausibleUssdText(text: String): Boolean {
         val t = text.lowercase()
         return !LAUNCHER_MARKERS.any { t.contains(it) } && run {
             val parts = text.split(" | ").filter { it.isNotBlank() }
