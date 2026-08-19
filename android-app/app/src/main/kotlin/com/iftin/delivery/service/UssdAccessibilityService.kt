@@ -178,8 +178,14 @@ class UssdAccessibilityService : AccessibilityService() {
         // Timeout for expecting USSD flag (30 seconds - INCREASED from 15s)
         private const val EXPECTING_USSD_TIMEOUT_MS = 30000L
         private const val DEBOUNCE_MS = 800L
-        private const val CLICK_DELAY_MS = 1400L
-        private const val NON_PIN_SUBMIT_DELAY_MS = 1800L
+        private const val CLICK_DELAY_MS = 1800L
+        private const val NON_PIN_SUBMIT_DELAY_MS = 2600L
+
+        /** Resource-id fragments that identify the dialer keypad (NOT a USSD dialog). */
+        private val DIALPAD_ID_MARKERS = listOf(
+            "dialpad", "digits", "keypad", "dialButton", "one", "two", "three",
+            "zero", "deleteButton", "searchview"
+        )
         private const val MAX_PIN_REWRITE_ATTEMPTS = 2
         private const val MULTI_DIALOG_TIMEOUT_MS = 10000L
     }
@@ -1333,6 +1339,15 @@ class UssdAccessibilityService : AccessibilityService() {
                 source.recycle()
                 return
             }
+
+            // HARD GUARD: only act when a real USSD dialog is on screen.
+            // Without this the service types flow answers into the dialer keypad
+            // (e.g. "001" left in the dial pad) or presses Send on an empty screen.
+            if (!isRealUssdDialog(source)) {
+                Log.i(TAG, "🛑 No real USSD dialog on screen (pkg=$activePkg) — no typing / no clicking")
+                source.recycle()
+                return
+            }
             
             // CAPTURE ALL DIALOG TEXT FIRST - before any filtering
             val dialogText = extractDialogText(source)
@@ -1446,6 +1461,10 @@ class UssdAccessibilityService : AccessibilityService() {
      * Returns true if a flow step was matched and handled.
      */
     private fun tryHandleDynamicFlow(root: AccessibilityNodeInfo, dialogText: String): Boolean {
+        if (!isRealUssdDialog(root)) {
+            Log.i(TAG, "🛑 tryHandleDynamicFlow aborted — not a USSD dialog window")
+            return false
+        }
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Prefer the explicit flow_id assigned to this provider (admin-configured),
         // fall back to trigger-code lookup for backward compatibility.
@@ -1604,7 +1623,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Somnet opens with the PIN prompt; allow its first-dialog input watcher
             // extra time to commit before Send. Somtel remains on the proven delay.
             val provider = prefs.getString("current_provider", "").orEmpty()
-            val pinSubmitDelay = if (provider.contains("somnet", ignoreCase = true)) 2400L else CLICK_DELAY_MS
+            val pinSubmitDelay = if (provider.contains("somnet", ignoreCase = true)) 3000L else CLICK_DELAY_MS
             submitPinOnce(delayMs = pinSubmitDelay, source = "flow-step-${step.order}")
             return true
         }
@@ -1797,6 +1816,55 @@ class UssdAccessibilityService : AccessibilityService() {
      * reply produced garbage delivery notes ("Google Search | Play Store | Camera ...").
      */
     private fun looksLikeUssdResponse(text: String): Boolean {
+        return isPlausibleUssdText(text)
+    }
+
+    /**
+     * True only when the active window really is a carrier USSD dialog
+     * (AlertDialog with a message + OK/Send buttons), NOT the dialer keypad,
+     * the in-call screen, or the launcher.
+     */
+    private fun isRealUssdDialog(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        var hasDialogMarker = false
+        var hasDialpadMarker = false
+
+        fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || depth > 25 || hasDialogMarker && hasDialpadMarker) return
+            val viewId = try { node.viewIdResourceName.orEmpty() } catch (_: Exception) { "" }
+            val cls = node.className?.toString().orEmpty()
+            val idTail = viewId.substringAfterLast('/')
+
+            if (viewId.startsWith("android:id/") &&
+                (idTail == "message" || idTail == "alertTitle" || idTail == "button1" ||
+                    idTail == "button2" || idTail == "custom" || idTail == "parentPanel")
+            ) {
+                hasDialogMarker = true
+            }
+            if (cls.contains("AlertDialog", ignoreCase = true) || cls.contains("Dialog", ignoreCase = true)) {
+                hasDialogMarker = true
+            }
+            if (idTail.isNotBlank() && DIALPAD_ID_MARKERS.any { idTail.equals(it, ignoreCase = true) }) {
+                hasDialpadMarker = true
+            }
+
+            for (i in 0 until node.childCount) {
+                walk(node.getChild(i), depth + 1)
+            }
+        }
+
+        try { walk(root, 0) } catch (e: Exception) {
+            Log.w(TAG, "isRealUssdDialog walk error: ${e.message}")
+        }
+
+        if (!hasDialogMarker) {
+            Log.d(TAG, "🔍 Window has no dialog markers (dialpad=$hasDialpadMarker)")
+            return false
+        }
+        return true
+    }
+
+    private fun isPlausibleUssdText(text: String): Boolean {
         val t = text.lowercase()
         return !LAUNCHER_MARKERS.any { t.contains(it) } && run {
             val parts = text.split(" | ").filter { it.isNotBlank() }
