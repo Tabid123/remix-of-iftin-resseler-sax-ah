@@ -1785,19 +1785,6 @@ class UssdAccessibilityService : AccessibilityService() {
         } && text.trim().length >= 3
     }
 
-    private fun unusedLooksLikeUssdResponse(text: String): Boolean {
-        val t = text.lowercase()
-        val launcherMarkers = listOf(
-            "double tap and drag", "home screen", "play store", "google search",
-            "google app", "voice search", "apps list", "page 1 of", "page 2 of",
-            "current page is", "notification shade", "quick settings", "widget"
-        )
-        if (launcherMarkers.any { t.contains(it) }) return false
-        // A launcher dump is a long pipe-joined list of short icon labels.
-        val parts = text.split(" | ").filter { it.isNotBlank() }
-        if (parts.size >= 12 && parts.count { it.length > 30 } == 0) return false
-        return text.trim().length >= 3
-    }
     
     /**
      * Start listening for additional dialogs for 10 seconds
