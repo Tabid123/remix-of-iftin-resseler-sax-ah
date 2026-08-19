@@ -1428,6 +1428,15 @@ class UssdDialerService : Service() {
                 
                 if (ussdResponse != null && ussdResponse.isNotBlank()) {
                     val responseText = ussdResponse.lowercase()
+
+                    // ===== MMI / connection-problem: the request DID leave the phone =====
+                    // Hormuud (single-step) often answers "Connection problem or invalid
+                    // MMI code" even though the top-up was accepted; the real result
+                    // arrives by SMS. Never retry these — that double-sends money.
+                    val mmiNotice = listOf(
+                        "invalid mmi", "mmi code", "connection problem",
+                        "connection filed", "connection failed"
+                    ).any { responseText.contains(it) }
                     
                     // Check for provider SUCCESS keywords first
                     val providerSuccess = listOf(
@@ -1444,7 +1453,11 @@ class UssdDialerService : Service() {
                         "declined", "rejected", "time out", "network error"
                     ).any { responseText.contains(it) }
                     
-                    if (providerSuccess) {
+                    if (mmiNotice && !providerSuccess) {
+                        finalStatus = "completed"
+                        finalResponse = "$ussdResponse\n\n(USSD dispatched — awaiting provider SMS confirmation. Not retried.)"
+                        android.util.Log.w("UssdDialer", "📨 MMI/connection notice — treating as dispatched, awaiting SMS")
+                    } else if (providerSuccess) {
                         finalStatus = "completed"
                         finalResponse = ussdResponse
                         android.util.Log.d("UssdDialer", "✅ Provider SUCCESS detected: ${ussdResponse.take(100)}")
@@ -1459,10 +1472,17 @@ class UssdDialerService : Service() {
                         android.util.Log.d("UssdDialer", "📝 Unknown USSD response, assuming OK: ${ussdResponse.take(100)}")
                     }
                 } else {
-                    // No response captured - report as timeout, NOT success
-                    finalStatus = "timeout"
-                    finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
-                    android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
+                    if (isSingleStep) {
+                        // Single-step top-ups are fire-and-confirm-by-SMS. Retrying them
+                        // risks a duplicate transfer, so mark dispatched instead.
+                        finalStatus = "completed"
+                        finalResponse = "USSD dispatched (single-step). No on-screen response — awaiting provider SMS confirmation."
+                        android.util.Log.w("UssdDialer", "📨 No response for single-step order — marked dispatched, awaiting SMS")
+                    } else {
+                        finalStatus = "timeout"
+                        finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
+                        android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
+                    }
                 }
                 
                 val statusUpdated = updateDeliveryStatusWithRetry(
@@ -1627,20 +1647,27 @@ class UssdDialerService : Service() {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
             
-            // Wait 1 second for AccessibilityService to capture response
-            android.util.Log.d("UssdDialer", "⏳ Waiting 1s for USSD response capture...")
-            delay(1000)
-            
-            // Retry up to 3 times with 500ms delay
-            repeat(3) { attempt ->
+            // Wait for AccessibilityService to capture the final carrier response.
+            android.util.Log.d("UssdDialer", "⏳ Waiting for USSD response capture...")
+            delay(1500)
+
+            // Poll for up to ~12s so the real provider result (not an intermediate
+            // dialog) is what gets reported back for the order.
+            val maxAttempts = 22
+            repeat(maxAttempts) { attempt ->
                 val response = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
                 val responseTime = prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
                 
                 // Only use response if it was captured within the last 30 seconds
                 val ageMs = System.currentTimeMillis() - responseTime
                 if (ageMs < 30000 && !response.isNullOrBlank()) {
+                    // Settle window: the carrier often replaces an intermediate dialog
+                    // with the real result a moment later. Take the newest text.
+                    delay(2000)
+                    val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                    val finalText = if (!newer.isNullOrBlank()) newer else response
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
-                    android.util.Log.d("UssdDialer", "📝 Response content: ${response.take(150)}")
+                    android.util.Log.d("UssdDialer", "📝 Response content: ${finalText.take(150)}")
                     
                     // Clear the response after reading to prevent reuse
                     prefs.edit()
@@ -1651,25 +1678,27 @@ class UssdDialerService : Service() {
 
                     // Attach PIN diagnostic snapshot if carrier rejected PIN — surfaces
                     // root cause in admin delivery_notes without needing adb logcat.
-                    val mentionsInvalidPin = response.contains("invalid pin", ignoreCase = true) ||
-                        response.contains("pin khaldan", ignoreCase = true) ||
-                        response.contains("pin format", ignoreCase = true) ||
-                        response.contains("wrong pin", ignoreCase = true)
+                    val mentionsInvalidPin = finalText.contains("invalid pin", ignoreCase = true) ||
+                        finalText.contains("pin khaldan", ignoreCase = true) ||
+                        finalText.contains("pin format", ignoreCase = true) ||
+                        finalText.contains("wrong pin", ignoreCase = true)
                     return if (mentionsInvalidPin) {
                         val debug = prefs.getString(UssdAccessibilityService.KEY_LAST_PIN_DEBUG, null)
                         if (!debug.isNullOrBlank()) {
-                            "$response\n\n--- PIN DEBUG ---\n$debug"
-                        } else response
-                    } else response
+                            "$finalText\n\n--- PIN DEBUG ---\n$debug"
+                        } else finalText
+                    } else finalText
                 }
                 
-                if (attempt < 2) {
-                    android.util.Log.d("UssdDialer", "⏳ No response yet, retrying in 500ms (attempt ${attempt+1}/3)")
+                if (attempt < maxAttempts - 1) {
+                    if (attempt % 5 == 0) {
+                        android.util.Log.d("UssdDialer", "⏳ No response yet (attempt ${attempt + 1}/$maxAttempts)")
+                    }
                     delay(500)
                 }
             }
             
-            android.util.Log.d("UssdDialer", "⚠️ No USSD response captured after 3 attempts")
+            android.util.Log.d("UssdDialer", "⚠️ No USSD response captured after $maxAttempts attempts")
             return null
         } catch (e: Exception) {
             android.util.Log.e("UssdDialer", "❌ Error reading USSD response: ${e.message}")
