@@ -466,7 +466,7 @@ class UssdAccessibilityService : AccessibilityService() {
     private fun isValueCommittedInActiveField(root: AccessibilityNodeInfo, expected: String): Boolean {
         if (expected.isBlank()) return false
         val candidates = collectEditableFieldCandidates(root)
-        return try {
+        val matched = try {
             // Some carrier dialogs expose both the real EditText and a second hidden
             // accessibility EditText. Selecting only one "best" candidate can pick
             // the empty mirror even though the visible field contains the exact value,
@@ -486,6 +486,42 @@ class UssdAccessibilityService : AccessibilityService() {
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
+        if (matched) return true
+        // Last resort: some carrier dialogs (e.g. Jeeb) render the typed value in a
+        // node that is no longer reported as editable/enabled. If the value is
+        // clearly visible anywhere on the dialog, treat it as committed so Send
+        // is never blocked forever.
+        return screenShowsValue(root, expected)
+    }
+
+    /** True when [expected] is visible as text somewhere in the dialog tree (non-button node). */
+    private fun screenShowsValue(root: AccessibilityNodeInfo, expected: String): Boolean {
+        val target = expected.trim()
+        if (target.isBlank()) return false
+        var found = false
+        fun walk(node: AccessibilityNodeInfo?) {
+            if (node == null || found) return
+            try {
+                val className = node.className?.toString().orEmpty()
+                val isButton = className.contains("Button", ignoreCase = true)
+                val text = node.text?.toString()?.trim().orEmpty()
+                if (!isButton && text.isNotEmpty()) {
+                    val masked = text.length == target.length && text.all { it == '•' || it == '*' }
+                    if (text == target || masked) {
+                        found = true
+                        return
+                    }
+                }
+                for (i in 0 until node.childCount) {
+                    val child = node.getChild(i) ?: continue
+                    walk(child)
+                    try { child.recycle() } catch (_: Exception) {}
+                    if (found) return
+                }
+            } catch (_: Exception) {}
+        }
+        walk(root)
+        return found
     }
 
     /**
