@@ -1835,7 +1835,21 @@ class UssdAccessibilityService : AccessibilityService() {
      * Save captured USSD response to SharedPreferences
      * UssdDialerService will read this and send to backend as delivery_notes
      */
-    private fun saveUssdResponse(text: String) {
+    /**
+     * A terminal USSD result dialog has NO editable input field — the carrier is
+     * only showing the outcome with an OK/Close button.
+     */
+    private fun isTerminalResultDialog(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            candidates.isEmpty()
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
+    }
+
+    private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
         try {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -1859,6 +1873,13 @@ class UssdAccessibilityService : AccessibilityService() {
                 .putString(KEY_LAST_USSD_RESPONSE, text)
                 .putLong(KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
                 .apply()
+            if (isFinal) {
+                prefs.edit()
+                    .putString(KEY_FINAL_USSD_RESPONSE, text)
+                    .putLong(KEY_FINAL_USSD_RESPONSE_TIME, System.currentTimeMillis())
+                    .apply()
+                Log.d(TAG, "🏁 Saved FINAL USSD result dialog: ${text.take(100)}")
+            }
             Log.d(TAG, "💾 Saved USSD response to SharedPreferences: ${text.take(100)}")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to save USSD response: ${e.message}")
