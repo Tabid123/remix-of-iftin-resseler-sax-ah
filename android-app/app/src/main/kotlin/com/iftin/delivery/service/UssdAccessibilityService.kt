@@ -1374,6 +1374,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source))
             }
 
+            // ===== TERMINAL RESULT DIALOG =====
+            // No editable field => carrier is only showing the outcome. Store it as
+            // the authoritative FINAL result and dismiss it with OK/Close so the
+            // session ends cleanly (no lingering dialog, no stale intermediate text).
+            if (isTerminalResultDialog(source)) {
+                if (!dialogText.isNullOrBlank()) {
+                    saveUssdResponse(dialogText, isFinal = true)
+                }
+                val dismissed = clickTerminalDismissButton(source)
+                Log.i(TAG, "🏁 Terminal USSD result dialog handled (dismissed=$dismissed)")
+                resetSessionState("terminal_result_dialog")
+                source.recycle()
+                return
+            }
+
             val hardStopRoot = rootInActiveWindow ?: source
             if (shouldHardStopForPinStage(hardStopRoot, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 if (!dialogText.isNullOrBlank()) {
