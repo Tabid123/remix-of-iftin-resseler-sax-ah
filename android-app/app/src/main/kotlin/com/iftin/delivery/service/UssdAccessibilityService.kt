@@ -88,6 +88,9 @@ class UssdAccessibilityService : AccessibilityService() {
         const val KEY_LAST_USSD_TIME = "last_ussd_time"
         const val KEY_LAST_USSD_RESPONSE = "last_ussd_response"
         const val KEY_LAST_USSD_RESPONSE_TIME = "last_ussd_response_time"
+        /** Text of the LAST dialog of the session (no input field, only OK) — authoritative result. */
+        const val KEY_FINAL_USSD_RESPONSE = "final_ussd_response"
+        const val KEY_FINAL_USSD_RESPONSE_TIME = "final_ussd_response_time"
         /** Set by UssdDialerService when a SILENT (TelephonyManager) reply was received. */
         const val KEY_SILENT_RESPONSE_AT = "silent_ussd_response_at"
         const val KEY_USSD_SESSION_ID = "ussd_session_id"  // Session ID to bind responses
@@ -1362,7 +1365,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // ALWAYS save dialog text if not empty - for delivery_notes
             if (!dialogText.isNullOrBlank()) {
                 Log.d(TAG, "📝 Dialog text captured: ${dialogText.take(200)}")
-                saveUssdResponse(dialogText)
+                saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source))
             }
 
             val hardStopRoot = rootInActiveWindow ?: source
@@ -1832,7 +1835,21 @@ class UssdAccessibilityService : AccessibilityService() {
      * Save captured USSD response to SharedPreferences
      * UssdDialerService will read this and send to backend as delivery_notes
      */
-    private fun saveUssdResponse(text: String) {
+    /**
+     * A terminal USSD result dialog has NO editable input field — the carrier is
+     * only showing the outcome with an OK/Close button.
+     */
+    private fun isTerminalResultDialog(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            candidates.isEmpty()
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
+    }
+
+    private fun saveUssdResponse(text: String, isFinal: Boolean = false) {
         try {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -1856,6 +1873,13 @@ class UssdAccessibilityService : AccessibilityService() {
                 .putString(KEY_LAST_USSD_RESPONSE, text)
                 .putLong(KEY_LAST_USSD_RESPONSE_TIME, System.currentTimeMillis())
                 .apply()
+            if (isFinal) {
+                prefs.edit()
+                    .putString(KEY_FINAL_USSD_RESPONSE, text)
+                    .putLong(KEY_FINAL_USSD_RESPONSE_TIME, System.currentTimeMillis())
+                    .apply()
+                Log.d(TAG, "🏁 Saved FINAL USSD result dialog: ${text.take(100)}")
+            }
             Log.d(TAG, "💾 Saved USSD response to SharedPreferences: ${text.take(100)}")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to save USSD response: ${e.message}")

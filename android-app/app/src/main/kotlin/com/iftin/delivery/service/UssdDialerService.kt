@@ -1419,8 +1419,18 @@ class UssdDialerService : Service() {
             val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot, allowSilent)
             
             if (dialSuccess) {
+                val dialStartedAt = System.currentTimeMillis()
                 // Get the captured USSD response from AccessibilityService
-                val ussdResponse = getLastUssdResponse()
+                var ussdResponse = getLastUssdResponse()
+                var resultFromSms = false
+                if (ussdResponse.isNullOrBlank()) {
+                    android.util.Log.d("UssdDialer", "🔎 No dialog result — waiting for confirmation SMS...")
+                    val sms = waitForConfirmationSms(order.receiverPhone, order.topupAmount, dialStartedAt)
+                    if (!sms.isNullOrBlank()) {
+                        ussdResponse = "[SMS] $sms"
+                        resultFromSms = true
+                    }
+                }
                 
                 // ===== DETERMINE STATUS BASED ON REAL RESPONSE =====
                 val finalStatus: String
@@ -1483,6 +1493,9 @@ class UssdDialerService : Service() {
                         finalResponse = "USSD dialed but no provider response captured. Needs manual verification."
                         android.util.Log.w("UssdDialer", "⚠️ No USSD response captured - reporting as TIMEOUT (not success)")
                     }
+                }
+                if (resultFromSms) {
+                    android.util.Log.d("UssdDialer", "📩 Final status from SMS fallback: $finalStatus")
                 }
                 
                 val statusUpdated = updateDeliveryStatusWithRetry(
@@ -1643,6 +1656,45 @@ class UssdDialerService : Service() {
      * Waits up to 2 seconds with retries for response to be captured
      * Only returns response if captured within last 30 seconds
      */
+    /**
+     * Fallback result source: when the final USSD dialog was missed, wait for the
+     * carrier confirmation SMS that mentions BOTH the receiver number and the amount.
+     */
+    private suspend fun waitForConfirmationSms(
+        receiverPhone: String,
+        amount: Double?,
+        startedAt: Long,
+        timeoutMs: Long = 45000L
+    ): String? {
+        val digits = receiverPhone.filter { it.isDigit() }
+        val tail = if (digits.length >= 7) digits.takeLast(7) else digits
+        val amountVariants = amount?.let {
+            listOf(String.format("%.2f", it), String.format("%.1f", it), it.toString())
+        } ?: emptyList()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val prefs = getSharedPreferences("iftin_sms_log", Context.MODE_PRIVATE)
+        while (System.currentTimeMillis() < deadline) {
+            val entries = prefs.getString("entries", "").orEmpty()
+                .split("\u0002").filter { it.isNotBlank() }
+            for (raw in entries.reversed()) {
+                val parts = raw.split("\u0001")
+                val ts = parts.getOrNull(0)?.toLongOrNull() ?: continue
+                val body = parts.getOrNull(1).orEmpty()
+                if (ts < startedAt - 5000) continue
+                val bodyDigits = body.filter { it.isDigit() }
+                val matchesPhone = tail.isNotBlank() && bodyDigits.contains(tail)
+                val matchesAmount = amountVariants.isEmpty() || amountVariants.any { body.contains(it) }
+                if (matchesPhone && matchesAmount) {
+                    android.util.Log.d("UssdDialer", "📩 Result resolved from SMS: ${body.take(120)}")
+                    return body
+                }
+            }
+            delay(2000)
+        }
+        android.util.Log.w("UssdDialer", "📭 No confirmation SMS matched receiver=$tail amount=$amount")
+        return null
+    }
+
     private suspend fun getLastUssdResponse(): String? {
         try {
             val prefs = getSharedPreferences(UssdAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -1655,8 +1707,15 @@ class UssdDialerService : Service() {
             // dialog) is what gets reported back for the order.
             val maxAttempts = 22
             repeat(maxAttempts) { attempt ->
-                val response = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
-                val responseTime = prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
+                // The LAST dialog (OK-only, no input field) is the authoritative
+                // carrier result — prefer it over intermediate menu text.
+                val finalDialog = prefs.getString(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE, null)
+                val finalTime = prefs.getLong(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME, 0)
+                val useFinal = !finalDialog.isNullOrBlank() && System.currentTimeMillis() - finalTime < 30000
+                val response = if (useFinal) finalDialog
+                    else prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
+                val responseTime = if (useFinal) finalTime
+                    else prefs.getLong(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME, 0)
                 
                 // Only use response if it was captured within the last 30 seconds
                 val ageMs = System.currentTimeMillis() - responseTime
@@ -1664,8 +1723,13 @@ class UssdDialerService : Service() {
                     // Settle window: the carrier often replaces an intermediate dialog
                     // with the real result a moment later. Take the newest text.
                     delay(2000)
+                    val newerFinal = prefs.getString(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE, null)
                     val newer = prefs.getString(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE, null)
-                    val finalText = if (!newer.isNullOrBlank()) newer else response
+                    val finalText = when {
+                        !newerFinal.isNullOrBlank() -> newerFinal
+                        !newer.isNullOrBlank() -> newer
+                        else -> response
+                    }
                     android.util.Log.d("UssdDialer", "📥 Retrieved USSD response (age: ${ageMs}ms, attempt: ${attempt+1})")
                     android.util.Log.d("UssdDialer", "📝 Response content: ${finalText.take(150)}")
                     
@@ -1673,6 +1737,8 @@ class UssdDialerService : Service() {
                     prefs.edit()
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE)
                         .remove(UssdAccessibilityService.KEY_LAST_USSD_RESPONSE_TIME)
+                        .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE)
+                        .remove(UssdAccessibilityService.KEY_FINAL_USSD_RESPONSE_TIME)
                         .remove(UssdAccessibilityService.KEY_SILENT_RESPONSE_AT)
                         .apply()
 

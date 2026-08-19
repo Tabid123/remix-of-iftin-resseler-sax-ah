@@ -61,6 +61,10 @@ class SmsReceiver : BroadcastReceiver() {
                     
                     Log.d(TAG, "SMS received from: $senderPhone")
                     Log.d(TAG, "SMS body: $messageBody")
+
+                    // Keep a short local log so a delivery can fall back to the
+                    // carrier SMS when the USSD dialog result was not captured.
+                    logSmsLocally(context, messageBody)
                     Log.d(TAG, "Generated tx_id (timestamp-based): $uniqueTxId")
                     
                     // Get which SIM received this SMS
@@ -113,6 +117,24 @@ class SmsReceiver : BroadcastReceiver() {
                 wakeLock.release()
                 Log.d(TAG, "📨 WakeLock released")
             }
+        }
+    }
+
+    /**
+     * Stores the last 20 incoming SMS bodies (with timestamps) in SharedPreferences.
+     * UssdDialerService reads this to resolve an order result when the final USSD
+     * dialog was missed — matching on receiver number + amount.
+     */
+    private fun logSmsLocally(context: Context, body: String) {
+        try {
+            val prefs = context.getSharedPreferences("iftin_sms_log", Context.MODE_PRIVATE)
+            val existing = prefs.getString("entries", "").orEmpty()
+            val clean = body.replace("\u0001", " ").replace("\n", " ").trim()
+            val entry = "${System.currentTimeMillis()}\u0001$clean"
+            val list = (existing.split("\u0002").filter { it.isNotBlank() } + entry).takeLast(20)
+            prefs.edit().putString("entries", list.joinToString("\u0002")).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to log SMS locally: ${e.message}")
         }
     }
 
