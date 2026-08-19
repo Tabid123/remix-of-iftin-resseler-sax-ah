@@ -1311,6 +1311,16 @@ class UssdAccessibilityService : AccessibilityService() {
             if (!source.refresh()) {
                 Log.d(TAG, "⚠️ source.refresh() returned false — node may be stale")
             }
+
+            // The dialog may already be gone by the time this delayed runnable fires.
+            // If the active window now belongs to the launcher (or any non-phone app),
+            // do NOT read it — otherwise we capture the home screen as the USSD reply.
+            val activePkg = source.packageName?.toString().orEmpty()
+            if (activePkg.isNotBlank() && !isUssdRelatedPackage(activePkg)) {
+                Log.d(TAG, "🚪 Active window is '$activePkg' (not a USSD/phone app) — skipping capture")
+                source.recycle()
+                return
+            }
             
             // CAPTURE ALL DIALOG TEXT FIRST - before any filtering
             val dialogText = extractDialogText(source)
