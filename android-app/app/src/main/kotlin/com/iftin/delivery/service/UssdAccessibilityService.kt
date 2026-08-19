@@ -1371,14 +1371,14 @@ class UssdAccessibilityService : AccessibilityService() {
             // ALWAYS save dialog text if not empty - for delivery_notes
             if (!dialogText.isNullOrBlank()) {
                 Log.d(TAG, "📝 Dialog text captured: ${dialogText.take(200)}")
-                saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source))
+                saveUssdResponse(dialogText, isFinal = isTerminalResultDialog(source, dialogText))
             }
 
             // ===== TERMINAL RESULT DIALOG =====
             // No editable field => carrier is only showing the outcome. Store it as
             // the authoritative FINAL result and dismiss it with OK/Close so the
             // session ends cleanly (no lingering dialog, no stale intermediate text).
-            if (isTerminalResultDialog(source)) {
+            if (isTerminalResultDialog(source, dialogText)) {
                 if (!dialogText.isNullOrBlank()) {
                     saveUssdResponse(dialogText, isFinal = true)
                 }
@@ -1876,14 +1876,52 @@ class UssdAccessibilityService : AccessibilityService() {
      * A terminal USSD result dialog has NO editable input field — the carrier is
      * only showing the outcome with an OK/Close button.
      */
-    private fun isTerminalResultDialog(root: AccessibilityNodeInfo?): Boolean {
+    private fun isTerminalResultDialog(root: AccessibilityNodeInfo?, dialogText: String? = null): Boolean {
         if (root == null) return false
         val candidates = collectEditableFieldCandidates(root)
-        return try {
-            candidates.isEmpty()
+        val hasEditable = try {
+            candidates.isNotEmpty()
         } finally {
             candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
         }
+        if (hasEditable) return false
+
+        // A carrier prompt can hide its EditText from Accessibility. In that case the
+        // dialog still expects input (it shows Send/Cancel) and pressing the positive
+        // button submits an EMPTY value. Only treat it as terminal when the buttons
+        // are dismiss-only and the text is not a question/prompt.
+        if (hasInputAwaitingButtons(root)) {
+            Log.i(TAG, "🛑 Not terminal — dialog exposes Send/Cancel (input still expected)")
+            return false
+        }
+        val text = (dialogText ?: extractDialogText(root)).orEmpty().lowercase()
+        if (text.isNotBlank()) {
+            val promptMarkers = listOf(
+                "geli", "fadlan", "hubi", "enter", "xulo", "dooro", "select",
+                "ma hubtaa", "mu hubtaa", "pin", "input required", "try again"
+            )
+            if (promptMarkers.any { text.contains(it) } || looksLikeNumberedMenu(text)) {
+                Log.i(TAG, "🛑 Not terminal — dialog text still looks like a prompt")
+                return false
+            }
+        }
+        return true
+    }
+
+    /** True when the dialog shows a Send/Dir (submit) button — i.e. it wants input. */
+    private fun hasInputAwaitingButtons(root: AccessibilityNodeInfo): Boolean {
+        val submitLabels = listOf("Send", "send", "SEND", "Dir", "dir", "DIR", "Soo dir", "Submit", "submit")
+        for (label in submitLabels) {
+            val nodes = try { root.findAccessibilityNodeInfosByText(label) } catch (_: Exception) { null } ?: continue
+            var found = false
+            for (n in nodes) {
+                val t = (n.text?.toString() ?: n.contentDescription?.toString() ?: "").trim()
+                if (t.equals(label, ignoreCase = true) && isClickableButton(n)) found = true
+                try { n.recycle() } catch (_: Exception) {}
+            }
+            if (found) return true
+        }
+        return false
     }
 
     /**
@@ -1901,6 +1939,7 @@ class UssdAccessibilityService : AccessibilityService() {
             "Haye", "haye", "HAYE", "Haa", "haa", "HAA", "Hagaag", "hagaag"
         )
         for (label in labels) {
+            if (label.equals("Haa", ignoreCase = true)) continue // that's a choice, not a dismiss
             val nodes = try { root.findAccessibilityNodeInfosByText(label) } catch (_: Exception) { null } ?: continue
             for (node in nodes) {
                 try {
@@ -1916,12 +1955,21 @@ class UssdAccessibilityService : AccessibilityService() {
             }
             nodes.forEach { n -> try { n.recycle() } catch (_: Exception) {} }
         }
-        // Fallback: the AlertDialog positive button
+        // Fallback: the AlertDialog positive button — ONLY when its label is a
+        // dismiss label. On carrier prompts button1 is "Send", and clicking it
+        // would submit an empty field.
         val positive = try {
             root.findAccessibilityNodeInfosByViewId("android:id/button1")?.firstOrNull()
         } catch (_: Exception) { null }
         if (positive != null) {
-            val ok = try { positive.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+            val plabel = (positive.text?.toString() ?: positive.contentDescription?.toString() ?: "").trim()
+            val dismissLike = plabel.isNotBlank() && labels.any { it.equals(plabel, ignoreCase = true) }
+            val ok = if (dismissLike) {
+                try { positive.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+            } else {
+                Log.i(TAG, "🛑 Skipping button1 dismiss — label='$plabel' is not a dismiss button")
+                false
+            }
             try { positive.recycle() } catch (_: Exception) {}
             if (ok) {
                 Log.d(TAG, "✅ Terminal dialog dismissed via android:id/button1")
@@ -2218,6 +2266,20 @@ class UssdAccessibilityService : AccessibilityService() {
         if (hasEmptyEditableInput) {
             Log.i(TAG, "🛑 Suppressing auto-click — dialog has empty input field (would trigger 'Input required')")
             return true
+        }
+
+        // 3. Hidden input case: no editable node is exposed to Accessibility, but the
+        //    dialog still shows a Send button and prompt text. Pressing Send there
+        //    submits an empty value, so stay away.
+        if (!hasEditableInput && hasInputAwaitingButtons(root)) {
+            val lower = dialogText.orEmpty().lowercase()
+            val promptLike = lower.isBlank() || listOf(
+                "geli", "fadlan", "hubi", "enter", "xulo", "dooro", "select", "pin"
+            ).any { lower.contains(it) } || looksLikeNumberedMenu(lower)
+            if (promptLike) {
+                Log.i(TAG, "🛑 Suppressing auto-click — Send visible but no value entered (hidden input)")
+                return true
+            }
         }
 
         return false
