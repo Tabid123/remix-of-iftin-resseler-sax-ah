@@ -2268,6 +2268,20 @@ class UssdAccessibilityService : AccessibilityService() {
             return true
         }
 
+        // 3. Hidden input case: no editable node is exposed to Accessibility, but the
+        //    dialog still shows a Send button and prompt text. Pressing Send there
+        //    submits an empty value, so stay away.
+        if (!hasEditableInput && hasInputAwaitingButtons(root)) {
+            val lower = dialogText.orEmpty().lowercase()
+            val promptLike = lower.isBlank() || listOf(
+                "geli", "fadlan", "hubi", "enter", "xulo", "dooro", "select", "pin"
+            ).any { lower.contains(it) } || looksLikeNumberedMenu(lower)
+            if (promptLike) {
+                Log.i(TAG, "🛑 Suppressing auto-click — Send visible but no value entered (hidden input)")
+                return true
+            }
+        }
+
         return false
     }
     
