@@ -1842,13 +1842,15 @@ class UssdDialerService : Service() {
                     android.os.Handler(android.os.Looper.getMainLooper())
                 )
                 
-                // Timeout after 10 seconds
+                // Timeout after 20 seconds — Hormuud's network reply for
+                // *726*...# regularly takes 12-15s, and a premature timeout used to
+                // drop us into the visible dialer (the "not silent" complaint).
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     if (continuation.isActive) {
-                        android.util.Log.w("UssdDialer", "⏱️ Silent USSD timeout (10s)")
+                        android.util.Log.w("UssdDialer", "⏱️ Silent USSD timeout (20s)")
                         continuation.resume(false)
                     }
-                }, 10000)
+                }, 20000)
                 
             } catch (e: SecurityException) {
                 android.util.Log.e("UssdDialer", "🔒 Silent USSD permission denied: ${e.message}")
