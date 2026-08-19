@@ -1657,14 +1657,14 @@ class UssdAccessibilityService : AccessibilityService() {
                 lower.contains("password") ||
                 lower.contains("furaha")
         )
-        val matchedStep = if (isYesNoConfirmation) {
+        val matchedStep = (if (isYesNoConfirmation) {
             // The final Somnet screen must always answer 1 (Haa). Prefer the
             // configured pending confirmation step even if carrier wording varies.
             flow.steps.firstOrNull { s ->
                 s.order !in completedFlowSteps && !s.isPinField &&
                     s.responseTemplate.trim().trim('{', '}') == "1"
             }
-        } else null ?: flow.steps.firstOrNull { s ->
+        } else null) ?: flow.steps.firstOrNull { s ->
             s.order !in completedFlowSteps &&
             s.keywords.isNotEmpty() &&
             s.keywords.any { kw -> lower.contains(kw.lowercase()) }
@@ -1797,7 +1797,9 @@ class UssdAccessibilityService : AccessibilityService() {
         var typed = false
         try {
             for (et in edits) {
-                et.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                // A real click is required on Samsung USSD widgets to establish
+                // the input connection before ACTION_SET_TEXT can commit "1".
+                focusEditableField(et)
                 // Clear existing text first to prevent appending
                 val clearArgs = android.os.Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
