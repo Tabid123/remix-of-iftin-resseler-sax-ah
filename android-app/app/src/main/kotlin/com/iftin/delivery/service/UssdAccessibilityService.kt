@@ -1709,20 +1709,65 @@ class UssdAccessibilityService : AccessibilityService() {
         // a previous non-PIN submit, since each menu page = its own submit.
         // For non-PIN steps we use a fresh runnable that doesn't gate on pinSubmittedForSession.
         scheduledSubmitRunnable?.let { handler.removeCallbacks(it) }
-        val r = Runnable {
+        var submitAttempt = 0
+        lateinit var submitRunnable: Runnable
+        submitRunnable = Runnable {
             val rt = rootInActiveWindow ?: return@Runnable
+            var rescheduled = false
             try {
+                // Never press Send while the dialog input is still empty — carriers
+                // answer "Input required. Try again" and the whole order dies.
+                if (!isValueCommittedInActiveField(rt, response)) {
+                    submitAttempt++
+                    if (submitAttempt <= 3) {
+                        Log.w(TAG, "⏳ Field not committed yet (attempt $submitAttempt) — retyping '$response' and waiting")
+                        typeIntoActiveEditableField(rt, response)
+                        handler.postDelayed(submitRunnable, SUBMIT_RECHECK_DELAY_MS)
+                        rescheduled = true
+                        return@Runnable
+                    }
+                    Log.e(TAG, "❌ Skipping Send — input field still empty after $submitAttempt attempts")
+                    return@Runnable
+                }
                 submitCount++
                 Log.d(TAG, "📨 Non-PIN flow submit step=${step.order} submitCount=$submitCount")
                 clickSendOrOkButton(rt)
-            } finally { rt.recycle() }
+            } finally {
+                if (!rescheduled) { try { rt.recycle() } catch (_: Exception) {} } else { try { rt.recycle() } catch (_: Exception) {} }
+            }
         }
-        scheduledSubmitRunnable = r
+        scheduledSubmitRunnable = submitRunnable
         // Give the EditText enough time to commit the typed value before pressing
         // Send. Some carrier dialogs (Somtel/Hormuud) fire "Input required, Try again"
         // if Send is dispatched too quickly after ACTION_SET_TEXT / PASTE.
-        handler.postDelayed(r, NON_PIN_SUBMIT_DELAY_MS)
+        handler.postDelayed(submitRunnable, NON_PIN_SUBMIT_DELAY_MS)
         return true
+    }
+
+    /** Re-write [value] into the currently active editable field (SET_TEXT + paste fallback). */
+    private fun typeIntoActiveEditableField(root: AccessibilityNodeInfo, value: String): Boolean {
+        val candidates = collectEditableFieldCandidates(root)
+        return try {
+            val best = selectBestEditableCandidate(candidates) ?: return false
+            val node = best.node
+            focusEditableField(node)
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
+            }
+            var ok = try { node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) } catch (_: Exception) { false }
+            if (!ok) {
+                ok = try {
+                    val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("ussd_value", value))
+                    node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                } catch (_: Exception) { false }
+            }
+            setTextSuppressUntilMs = System.currentTimeMillis() + 1500L
+            ok
+        } finally {
+            candidates.forEach { try { it.node.recycle() } catch (_: Exception) {} }
+        }
     }
 
     /** Format amount typed into a USSD dialog EditText: keep decimal as-is.
