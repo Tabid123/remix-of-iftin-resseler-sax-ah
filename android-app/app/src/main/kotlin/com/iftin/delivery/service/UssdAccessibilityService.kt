@@ -1649,6 +1649,15 @@ class UssdAccessibilityService : AccessibilityService() {
         val edits = mutableListOf<AccessibilityNodeInfo>()
         findEditTexts(root, edits)
         if (edits.isEmpty()) {
+            // Confirmation menus ("1. Haa / 2. Maya") can hide their input field.
+            // Try clicking the matching menu option directly instead of pressing
+            // Send with nothing selected.
+            val shortNumeric = response.length <= 2 && response.all(Char::isDigit)
+            if (shortNumeric && clickNumberedMenuOption(root, response)) {
+                completedFlowSteps.add(step.order)
+                Log.i(TAG, "✅ Selected menu option '$response' by click (no EditText available)")
+                return true
+            }
             Log.w(TAG, "⚠️ Flow step matched but no EditText to type into")
             return false
         }
