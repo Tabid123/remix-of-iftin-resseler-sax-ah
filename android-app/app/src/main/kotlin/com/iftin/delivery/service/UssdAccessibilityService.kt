@@ -1674,7 +1674,6 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         // ===== Non-PIN flow step: clear + write once, then submit =====
-        val originDialogFingerprint = dialogFingerprintFor(dialogText)
         val edits = mutableListOf<AccessibilityNodeInfo>()
         findEditTexts(root, edits)
         if (edits.isEmpty()) {
@@ -1690,6 +1689,7 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.w(TAG, "⚠️ Flow step matched but no EditText to type into")
             return false
         }
+        val originDialogFingerprint = dialogFingerprintFor(dialogText, response)
 
         var typed = false
         try {
@@ -1766,7 +1766,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 // Never press Send while the dialog input is still empty — carriers
                 // answer "Input required. Try again" and the whole order dies.
                 val liveDialogText = extractDialogText(rt)
-                if (dialogFingerprintFor(liveDialogText) != originDialogFingerprint) {
+                if (dialogFingerprintFor(liveDialogText, response) != originDialogFingerprint) {
                     Log.i(TAG, "🛑 Skipping stale Send — carrier dialog changed before step ${step.order} submit")
                     return@Runnable
                 }
@@ -2398,7 +2398,8 @@ class UssdAccessibilityService : AccessibilityService() {
         )
     }
 
-    private fun dialogFingerprintFor(text: String?): String = text.orEmpty()
+    private fun dialogFingerprintFor(text: String?, transientValue: String = ""): String = text.orEmpty()
+        .let { raw -> if (transientValue.isNotBlank()) raw.replace(transientValue, "", ignoreCase = true) else raw }
         .lowercase()
         .replace(Regex("\\s+"), " ")
         .trim()
