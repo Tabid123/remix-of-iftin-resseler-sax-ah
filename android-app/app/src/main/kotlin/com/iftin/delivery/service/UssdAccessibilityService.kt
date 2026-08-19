@@ -1461,6 +1461,10 @@ class UssdAccessibilityService : AccessibilityService() {
      * Returns true if a flow step was matched and handled.
      */
     private fun tryHandleDynamicFlow(root: AccessibilityNodeInfo, dialogText: String): Boolean {
+        if (!isRealUssdDialog(root)) {
+            Log.i(TAG, "🛑 tryHandleDynamicFlow aborted — not a USSD dialog window")
+            return false
+        }
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Prefer the explicit flow_id assigned to this provider (admin-configured),
         // fall back to trigger-code lookup for backward compatibility.
