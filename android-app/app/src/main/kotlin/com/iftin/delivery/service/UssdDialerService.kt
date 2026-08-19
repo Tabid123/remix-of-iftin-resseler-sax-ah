@@ -1396,10 +1396,25 @@ class UssdDialerService : Service() {
             // Silent USSD is only valid for single-step providers (e.g. Hormuud *726*...#).
             // Anything with an interactive flow must open the real dialer so the
             // AccessibilityService can walk the menu / type the PIN.
-            val hasInteractiveFlow = (order.ussdMethod ?: "").equals("interactive", ignoreCase = true) ||
-                !order.ussdFlowId.isNullOrBlank() ||
-                UssdFlowsClient.findFlowForTrigger(triggerCode) != null
-            val allowSilent = !hasInteractiveFlow
+            val method = (order.ussdMethod ?: "").trim()
+            val isSingleStep = method.equals("single_step", ignoreCase = true)
+            // single_step (Hormuud *726*...#) is ALWAYS silent — never open the dialer,
+            // and never let a stale flow lookup turn it into an interactive dial.
+            val hasInteractiveFlow = !isSingleStep && (
+                method.equals("interactive", ignoreCase = true) ||
+                    !order.ussdFlowId.isNullOrBlank() ||
+                    UssdFlowsClient.findFlowForTrigger(triggerCode) != null
+            )
+            val allowSilent = isSingleStep || !hasInteractiveFlow
+            // Interactive context (pin/receiver/amount/flow) must be cleared for
+            // single-step orders, otherwise the accessibility service keeps typing
+            // the previous carrier's steps into whatever screen is on top.
+            if (allowSilent) {
+                getSharedPreferences("iftin_ussd_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .remove("current_ussd_flow_id")
+                    .apply()
+            }
             android.util.Log.d("UssdDialer", "🧭 Dial mode: ${if (allowSilent) "SILENT (single-step)" else "DIALOG (interactive)"} trigger=$triggerCode method=${order.ussdMethod}")
             val dialSuccess = dialUssdCode(ussdToDial, order.receiverPhone, order.packageCode, orderProvider, order.simSlot, allowSilent)
             
