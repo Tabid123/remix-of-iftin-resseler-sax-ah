@@ -433,7 +433,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 pinSubmittedForSession = true
                 submitCount++
                 Log.i(TAG, "✅ submitPinOnce[$source] auto-sending verified PIN (submitCount=$submitCount)")
-                clickSendOrOkButton(rt)
+                clickSendOrOkButton(rt, requiredCommittedValue = expected)
             } finally {
                 rt.recycle()
                 scheduledSubmitRunnable = null
@@ -1426,8 +1426,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // Search for clickable buttons with confirm text
+            // Search only for dismiss/continuation buttons here. Submit buttons such
+            // as Send/Confirm are owned exclusively by the verified flow scheduler;
+            // allowing this generic event path to click them can submit an empty field.
             for (buttonText in CONFIRM_BUTTONS) {
+                if (isSubmitButtonLabel(buttonText)) continue
                 val nodes = source.findAccessibilityNodeInfosByText(buttonText)
                 
                 for (node in nodes) {
@@ -1667,6 +1670,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         // ===== Non-PIN flow step: clear + write once, then submit =====
+        val originDialogFingerprint = dialogFingerprintFor(dialogText)
         val edits = mutableListOf<AccessibilityNodeInfo>()
         findEditTexts(root, edits)
         if (edits.isEmpty()) {
@@ -1757,6 +1761,11 @@ class UssdAccessibilityService : AccessibilityService() {
             try {
                 // Never press Send while the dialog input is still empty — carriers
                 // answer "Input required. Try again" and the whole order dies.
+                val liveDialogText = extractDialogText(rt)
+                if (dialogFingerprintFor(liveDialogText) != originDialogFingerprint) {
+                    Log.i(TAG, "🛑 Skipping stale Send — carrier dialog changed before step ${step.order} submit")
+                    return@Runnable
+                }
                 if (!isValueCommittedInActiveField(rt, response)) {
                     submitAttempt++
                     if (submitAttempt <= 3) {
@@ -1771,7 +1780,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 }
                 submitCount++
                 Log.d(TAG, "📨 Non-PIN flow submit step=${step.order} submitCount=$submitCount")
-                clickSendOrOkButton(rt)
+                clickSendOrOkButton(rt, requiredCommittedValue = response)
             } finally {
                 if (!rescheduled) { try { rt.recycle() } catch (_: Exception) {} } else { try { rt.recycle() } catch (_: Exception) {} }
             }
@@ -1949,6 +1958,17 @@ class UssdAccessibilityService : AccessibilityService() {
                             nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
                             try { node.recycle() } catch (_: Exception) {}
                             return true
+                        }
+                        val parent = try { node.parent } catch (_: Exception) { null }
+                        try {
+                            if (parent?.isClickable == true && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                                Log.d(TAG, "✅ Terminal dialog dismissed via parent of '$label'")
+                                nodes.forEach { n -> try { if (n !== node) n.recycle() } catch (_: Exception) {} }
+                                try { node.recycle() } catch (_: Exception) {}
+                                return true
+                            }
+                        } finally {
+                            try { parent?.recycle() } catch (_: Exception) {}
                         }
                     }
                 } catch (_: Exception) {}
@@ -2288,12 +2308,19 @@ class UssdAccessibilityService : AccessibilityService() {
     /**
      * Click Send/OK button after entering PIN
      */
-    private fun clickSendOrOkButton(root: AccessibilityNodeInfo) {
+    private fun clickSendOrOkButton(root: AccessibilityNodeInfo, requiredCommittedValue: String) {
         try {
             val dialogText = extractDialogText(root)
             if (shouldHardStopForPinStage(root, dialogText) && !shouldBypassPinHardStop(dialogText)) {
                 engagePinHardStop(dialogText)
                 Log.i(TAG, "✋ clickSendOrOkButton hard-stopped — PIN dialog requires full manual control")
+                return
+            }
+            // Absolute last-mile invariant: this method may submit only the exact
+            // value requested by the current flow step. ACTION_SET_TEXT returning
+            // true is insufficient; some carrier dialogs re-render and clear it.
+            if (requiredCommittedValue.isBlank() || !isValueCommittedInActiveField(root, requiredCommittedValue)) {
+                Log.e(TAG, "🛑 Send blocked — required value is not committed in the live input field")
                 return
             }
             if (shouldSuppressAutoClickForDialog(root, dialogText)) {
@@ -2332,6 +2359,17 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.e(TAG, "❌ Error clicking send after PIN: ${e.message}")
         }
     }
+
+    private fun isSubmitButtonLabel(label: String): Boolean {
+        val normalized = label.trim().lowercase()
+        return normalized in setOf("send", "dir", "soo dir", "submit", "confirm", "yes", "haa")
+    }
+
+    private fun dialogFingerprintFor(text: String?): String = text.orEmpty()
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(220)
     
     /**
      * Send broadcast to notify UssdDialerService that we clicked a button
