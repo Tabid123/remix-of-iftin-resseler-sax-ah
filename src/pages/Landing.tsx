@@ -7,10 +7,13 @@ import {
   PiggyBank,
   UserCog,
   CheckCircle2,
-  LayoutDashboard,
   Check,
 } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
+import ContactDialog from '@/components/landing/ContactDialog';
+import heroDashboard from '@/assets/landing/hero-dashboard.jpg';
+import missionYouth from '@/assets/landing/mission-youth.jpg';
+import automationFlow from '@/assets/landing/automation-flow.jpg';
 
 const BRAND = '#004ac6';
 const font = { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' };
@@ -57,15 +60,16 @@ const Landing = () => {
               </a>
             ))}
           </nav>
-          <a
-            href="https://wa.link/ake9qi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-[10px] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-            style={{ backgroundColor: '#2563eb' }}
-          >
-            Nala soo xiriir
-          </a>
+          <ContactDialog
+            trigger={
+              <button
+                className="rounded-[10px] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                style={{ backgroundColor: '#2563eb' }}
+              >
+                Nala soo xiriir
+              </button>
+            }
+          />
         </div>
       </header>
 
@@ -100,23 +104,14 @@ const Landing = () => {
               </a>
             </div>
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-[0_20px_60px_-25px_rgba(0,74,198,0.45)] ring-1 ring-[#dbe1ff]">
-            <div className="rounded-lg bg-[#dce9ff] p-6">
-              <div className="flex items-center gap-1.5">
-                {['#ba1a1a', '#e0b400', '#1f9d55'].map((c) => (
-                  <span key={c} className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
-                ))}
-              </div>
-              <div className="mt-4 space-y-3">
-                <div className="h-24 rounded-lg bg-white/80" />
-                <div className="grid grid-cols-3 gap-3">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-16 rounded-lg bg-white/80" />
-                  ))}
-                </div>
-                <div className="h-8 w-2/3 rounded-lg bg-white/80" />
-              </div>
-            </div>
+          <div className="overflow-hidden rounded-xl bg-white p-3 shadow-[0_20px_60px_-25px_rgba(0,74,198,0.45)] ring-1 ring-[#dbe1ff]">
+            <img
+              src={heroDashboard}
+              alt="Dashboard-ka Iftin Resellers oo lagu maamulo iibka data bundles-ka"
+              width={1280}
+              height={960}
+              className="w-full rounded-lg object-cover"
+            />
           </div>
         </div>
       </section>
@@ -150,7 +145,14 @@ const Landing = () => {
       {/* MISSION */}
       <section id="kusaabsan" className="bg-[#dce9ff] py-20 md:py-[120px]">
         <div className="mx-auto grid max-w-[1280px] items-center gap-12 px-5 md:grid-cols-2 md:px-20">
-          <div className="h-72 rounded-xl bg-[#b4c5ff] md:h-96" />
+          <img
+            src={missionYouth}
+            alt="Dhalinyaro Soomaaliyeed oo isticmaalaya nidaamka Iftin Resellers"
+            width={1024}
+            height={1024}
+            loading="lazy"
+            className="h-72 w-full rounded-xl object-cover shadow-lg md:h-96"
+          />
           <div>
             <h2 className="text-[28px] font-bold leading-tight tracking-tight md:text-[32px]">
               Dhiirigelinta Dhalinyarada
@@ -200,10 +202,14 @@ const Landing = () => {
 
           <div className="mt-10 rounded-xl bg-white p-6 ring-1 ring-[#dbe1ff]">
             <p className="text-center text-[16px] font-semibold">Muuqaalka Nidaamka Tooska ah (Automated Dashboard)</p>
-            <div className="mt-5 flex h-56 flex-col items-center justify-center gap-3 rounded-lg bg-[#dbe1ff] text-[#434655] md:h-72">
-              <LayoutDashboard className="h-7 w-7" />
-              <span className="text-xs font-medium">Dashboard Transaction Flow Simulation</span>
-            </div>
+            <img
+              src={automationFlow}
+              alt="Muuqaalka nidaamka automated ee dirista data bundles-ka"
+              width={1280}
+              height={720}
+              loading="lazy"
+              className="mt-5 w-full rounded-lg object-cover"
+            />
           </div>
         </div>
       </section>
@@ -224,7 +230,7 @@ const Landing = () => {
                 Ku habboon ganacsiyada yaryar iyo kuwa hadda bilaabaya nidaamka kireysiga.
               </p>
               <p className="mt-6 text-[38px] font-extrabold">
-                $50 <span className="text-[14px] font-medium text-[#434655]">/bishii</span>
+                $10 <span className="text-[14px] font-medium text-[#434655]">/bishii</span>
               </p>
               <ul className="mt-6 space-y-3">
                 {['App diyaar ah dhowr maalmood', 'Hosting iyo Maintenance waa ku jiraan', 'Taageero Farsamo 24/7'].map(
@@ -235,14 +241,13 @@ const Landing = () => {
                   )
                 )}
               </ul>
-              <a
-                href="https://wa.link/ake9qi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-7 block rounded-[10px] border border-[#c3c6d7] py-3 text-center text-sm font-semibold text-[#0b1c30] transition hover:bg-[#eff4ff]"
-              >
-                Dalbo Kireysi
-              </a>
+              <ContactDialog
+                trigger={
+                  <button className="mt-7 block w-full rounded-[10px] border border-[#c3c6d7] py-3 text-center text-sm font-semibold text-[#0b1c30] transition hover:bg-[#eff4ff]">
+                    Dalbo Kireysi
+                  </button>
+                }
+              />
             </div>
 
             {/* Buy */}
@@ -253,15 +258,15 @@ const Landing = () => {
               >
                 Lagu Taliyay
               </span>
-              <h3 className="text-[20px] font-bold">Iib Toos ah</h3>
+              <h3 className="text-[20px] font-bold">Sannadle (Yearly)</h3>
               <p className="mt-2 text-[14px] leading-6 text-[#434655]">
-                Iibka rasmiga ah ee nidaamka. La yeelo lahaansho buuxda.
+                Bixi hal mar sannadkii oo badbaadi lacag — qorshaha ugu qiimaha jaban.
               </p>
               <p className="mt-6 text-[38px] font-extrabold">
-                $800 <span className="text-[14px] font-medium text-[#434655]">/mar qura</span>
+                $100 <span className="text-[14px] font-medium text-[#434655]">/sannadkii</span>
               </p>
               <ul className="mt-6 space-y-3">
-                {['Lahaansho buuxda ee Nidaamka', 'Noocyo u gaar ah (Custom Features)', 'Taageero tababar bilowga'].map(
+                {['Laba bilood oo bilaash ah', 'Noocyo u gaar ah (Custom Features)', 'Taageero tababar bilowga'].map(
                   (i) => (
                     <li key={i} className="flex items-start gap-2 text-[14px] text-[#434655]">
                       <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: BRAND }} /> {i}
@@ -269,15 +274,16 @@ const Landing = () => {
                   )
                 )}
               </ul>
-              <a
-                href="https://wa.link/ake9qi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-7 block rounded-[10px] py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
-                style={{ backgroundColor: '#2563eb' }}
-              >
-                Dalbo Iib
-              </a>
+              <ContactDialog
+                trigger={
+                  <button
+                    className="mt-7 block w-full rounded-[10px] py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                    style={{ backgroundColor: '#2563eb' }}
+                  >
+                    Dalbo Sannadle
+                  </button>
+                }
+              />
             </div>
           </div>
         </div>
@@ -315,6 +321,15 @@ const Landing = () => {
             <ul className="mt-3 space-y-2 text-[13px] text-[#434655]">
               <li><a href="mailto:info@iftinagents.com" className="hover:text-[#004ac6]">info@iftinagents.com</a></li>
               <li><a href="tel:+252617195659" className="hover:text-[#004ac6]">+252-617195659</a></li>
+              <li>
+                <ContactDialog
+                  trigger={
+                    <button className="font-semibold hover:text-[#004ac6]" style={{ color: BRAND }}>
+                      Nala soo xiriir
+                    </button>
+                  }
+                />
+              </li>
             </ul>
           </div>
         </div>
