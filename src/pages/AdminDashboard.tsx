@@ -1077,7 +1077,8 @@ const AdminDashboard = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-primary/5 via-background to-secondary/5">
         <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        
+        <TenantSetupDialog open={showTenantSetup} onOpenChange={setShowTenantSetup} />
+
         <div className="flex-1 flex flex-col">
           <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center px-4 gap-4">
             <SidebarTrigger />
