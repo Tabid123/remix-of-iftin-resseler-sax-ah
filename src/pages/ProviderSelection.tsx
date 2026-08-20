@@ -129,20 +129,20 @@ const ProviderSelection = () => {
     },
   });
 
-  // Prefetch categories + per-provider packages (preserved)
-  const { data: providerRates = {} } = useQuery<Record<string, number>>({
-    queryKey: ['provider-top-rates'],
+  // Fetch active wholesale tiers per provider for tier-card design
+  const { data: providerTiers = {} } = useQuery<Record<string, any[]>>({
+    queryKey: ['provider-tier-rates'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('provider_wholesale_tiers')
-        .select('provider_id, profit_rate')
-        .eq('is_active', true);
+        .select('provider_id, tier_label, min_amount, max_amount, profit_rate')
+        .eq('is_active', true)
+        .order('min_amount', { ascending: true });
       if (error) throw error;
-      const map: Record<string, number> = {};
+      const map: Record<string, any[]> = {};
       (data || []).forEach((t: any) => {
-        const cur = map[t.provider_id];
-        const val = Number(t.profit_rate) || 0;
-        if (cur === undefined || val > cur) map[t.provider_id] = val;
+        if (!map[t.provider_id]) map[t.provider_id] = [];
+        map[t.provider_id].push(t);
       });
       return map;
     },
