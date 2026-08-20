@@ -21,6 +21,7 @@ import {
   Receipt,
   Zap,
   PhoneCall,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
