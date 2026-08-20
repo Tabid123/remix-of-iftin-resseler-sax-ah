@@ -20,6 +20,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ResellerRoute from "@/components/ResellerRoute";
 import ProviderSelection from "./pages/ProviderSelection";
 import Landing from "./pages/Landing";
+import RootRoute from "@/components/RootRoute";
 // Categories / Packages / Payment routes removed — app is now jumlo-only
 // OfflineMode page removed
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -93,7 +94,7 @@ const AppContent = () => {
       <div id="app-render-sentinel" hidden aria-hidden="true" />
       <StatusBarColor />
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/providers" element={<ProtectedRoute><ProviderSelection /></ProtectedRoute>} />
         {/* /offline-mode route removed */}
