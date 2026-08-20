@@ -28,6 +28,7 @@ import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+const ResellerDashboard = React.lazy(() => import("./pages/ResellerDashboard"));
 import DownloadApp from "./pages/DownloadApp";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import {
@@ -102,6 +103,7 @@ const AppContent = () => {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/reseller" element={<React.Suspense fallback={null}><ResellerDashboard /></React.Suspense>} />
         <Route path="/download-app" element={<DownloadApp />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

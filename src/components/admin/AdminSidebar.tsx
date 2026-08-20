@@ -147,6 +147,16 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
         <div className="px-2 pt-2">
           <TenantSwitcher collapsed={collapsed && !isMobile} />
         </div>
+        <div className="px-2 pb-1">
+          <a
+            href="/reseller"
+            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-primary hover:bg-muted/50"
+            title="Reseller Dashboard"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            {!collapsed && <span>{language === 'so' ? 'Reseller Dashboard' : 'Reseller Dashboard'}</span>}
+          </a>
+        </div>
         <SidebarGroup>
           <SidebarGroupLabel className={collapsed ? "text-center" : ""}>
             {!collapsed && (language === 'so' ? 'Maamul' : 'Admin Menu')}
