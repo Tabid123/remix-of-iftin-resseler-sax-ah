@@ -7,7 +7,6 @@ import {
   PiggyBank,
   UserCog,
   CheckCircle2,
-  LayoutDashboard,
   Check,
 } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
@@ -267,7 +266,7 @@ const Landing = () => {
                 $100 <span className="text-[14px] font-medium text-[#434655]">/sannadkii</span>
               </p>
               <ul className="mt-6 space-y-3">
-                {['Lahaansho buuxda ee Nidaamka', 'Noocyo u gaar ah (Custom Features)', 'Taageero tababar bilowga'].map(
+                {['Laba bilood oo bilaash ah', 'Noocyo u gaar ah (Custom Features)', 'Taageero tababar bilowga'].map(
                   (i) => (
                     <li key={i} className="flex items-start gap-2 text-[14px] text-[#434655]">
                       <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: BRAND }} /> {i}
@@ -322,6 +321,15 @@ const Landing = () => {
             <ul className="mt-3 space-y-2 text-[13px] text-[#434655]">
               <li><a href="mailto:info@iftinagents.com" className="hover:text-[#004ac6]">info@iftinagents.com</a></li>
               <li><a href="tel:+252617195659" className="hover:text-[#004ac6]">+252-617195659</a></li>
+              <li>
+                <ContactDialog
+                  trigger={
+                    <button className="font-semibold hover:text-[#004ac6]" style={{ color: BRAND }}>
+                      Nala soo xiriir
+                    </button>
+                  }
+                />
+              </li>
             </ul>
           </div>
         </div>
