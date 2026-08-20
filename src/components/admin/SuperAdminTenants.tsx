@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Building2, RefreshCw, Users, ShoppingCart, DollarSign } from "lucide-react";
+import { Building2, RefreshCw, Users, ShoppingCart, DollarSign, Settings2 } from "lucide-react";
+import TenantDetailDialog from "./TenantDetailDialog";
 
 interface TenantRow {
   id: string;
@@ -30,6 +31,7 @@ export default function SuperAdminTenants() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -108,7 +110,10 @@ export default function SuperAdminTenants() {
         )}
         {filtered.map((t) => (
           <Card key={t.id}>
-            <CardHeader className="pb-2">
+            <CardHeader
+              className="cursor-pointer pb-2"
+              onClick={() => setDetailId(t.id)}
+            >
               <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                 <span
                   className="inline-block h-3 w-3 rounded-full border"
@@ -139,11 +144,21 @@ export default function SuperAdminTenants() {
                     {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <Button variant="secondary" onClick={() => setDetailId(t.id)}>
+                  <Settings2 className="mr-2 h-4 w-4" /> Maamul / Xogta
+                </Button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <TenantDetailDialog
+        tenantId={detailId}
+        open={!!detailId}
+        onOpenChange={(v) => !v && setDetailId(null)}
+        onChanged={load}
+      />
     </div>
   );
 }
