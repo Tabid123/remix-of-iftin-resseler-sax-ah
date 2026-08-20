@@ -467,7 +467,7 @@ const ProviderSelection = () => {
                   style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
                 >
                   <div
-                    className="shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
+                    className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
                     style={{ backgroundColor: colors.bg }}
                   >
                     {p.provider_logo ? (
@@ -490,9 +490,12 @@ const ProviderSelection = () => {
                     ) : (
                       getInitials(p.provider_name)
                     )}
+                    <span className="absolute -bottom-0.5 -right-0.5 bg-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm" style={{ color: colors.bg }}>
+                      T1
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name}</p>
+                    <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name} - Jumlo</p>
                     <p className="text-xs text-gray-500 truncate">Internet &amp; Jumlo</p>
                   </div>
                 </button>
