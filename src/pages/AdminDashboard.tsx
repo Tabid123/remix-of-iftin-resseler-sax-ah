@@ -23,6 +23,8 @@ import { AdminAIChat } from '@/components/admin/AdminAIChat';
 
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import { TenantSetupDialog } from '@/components/tenant/TenantSetupDialog';
+import { useTenant } from '@/contexts/TenantContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
