@@ -52,10 +52,6 @@ Deno.serve(async (req) => {
       return affected;
     };
 
-    if (action === "update") {
-      // fallthrough below
-    }
-
     if (action === "source_providers") {
       const { source_slug, tenant_id } = body;
       const slug = source_slug || "iftin";
