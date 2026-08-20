@@ -70,7 +70,7 @@ export default function ResellerBanners() {
       <Card>
         <CardHeader><CardTitle>Ku dar Banner Cusub</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div><Label>Banner URL</Label><Input value={form.banner_image} onChange={(e) => setForm({ ...form, banner_image: e.target.value })} /></div>
             <div><Label>Alt Text</Label><Input value={form.alt_text} onChange={(e) => setForm({ ...form, alt_text: e.target.value })} /></div>
             <div><Label>Display Order</Label><Input type="number" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: parseInt(e.target.value) || 1 })} /></div>
@@ -86,20 +86,20 @@ export default function ResellerBanners() {
         <CardHeader><CardTitle>Banners</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-            <Table className="mobile-table">
+            <Table>
               <TableHeader><TableRow><TableHead>Preview</TableHead><TableHead>Type</TableHead><TableHead>Order</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {banners.map((b) => (
                   <TableRow key={b.id}>
-                    <TableCell data-label="Preview">
+                    <TableCell>
                       {b.media_type === 'video'
                         ? <video src={b.banner_image} className="h-16 rounded" />
                         : <img src={b.banner_image} alt={b.alt_text || 'Banner'} className="h-16 rounded object-cover" />}
                     </TableCell>
-                    <TableCell data-label="Type"><Badge variant="outline">{b.media_type || 'image'}</Badge></TableCell>
-                    <TableCell data-label="Order">{b.display_order}</TableCell>
-                    <TableCell data-label="Status">{b.is_active ? <span className="text-emerald-600">Active</span> : <span className="text-destructive">Inactive</span>}</TableCell>
-                    <TableCell data-label="Falal">
+                    <TableCell><Badge variant="outline">{b.media_type || 'image'}</Badge></TableCell>
+                    <TableCell>{b.display_order}</TableCell>
+                    <TableCell>{b.is_active ? <span className="text-emerald-600">Active</span> : <span className="text-destructive">Inactive</span>}</TableCell>
+                    <TableCell>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => toggle(b)}><Power className="h-4 w-4" /></Button>
                         <Button variant="destructive" size="sm" onClick={() => remove(b.id)}><Trash2 className="h-4 w-4" /></Button>

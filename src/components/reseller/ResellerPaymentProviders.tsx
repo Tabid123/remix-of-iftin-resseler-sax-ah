@@ -85,7 +85,7 @@ export default function ResellerPaymentProviders() {
       <Card>
         <CardHeader><CardTitle>Ku dar Payment Provider</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
             <div><Label>Magaca</Label><Input value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} /></div>
             <div><Label>Logo URL</Label><Input value={form.provider_logo} onChange={(e) => setForm({ ...form, provider_logo: e.target.value })} /></div>
             <div><Label>Commission %</Label><Input type="number" step="0.01" value={form.commission_rate} onChange={(e) => setForm({ ...form, commission_rate: parseFloat(e.target.value) || 0 })} /></div>
@@ -103,27 +103,27 @@ export default function ResellerPaymentProviders() {
         <CardHeader><CardTitle>Payment Providers</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-            <Table className="mobile-table">
+            <Table>
               <TableHeader><TableRow><TableHead>Magaca</TableHead><TableHead>Prefix</TableHead><TableHead>Number</TableHead><TableHead>USSD</TableHead><TableHead>Commission</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {items.map((pp) => {
                   const isEditing = editing?.id === pp.id;
                   return (
                     <TableRow key={pp.id}>
-                      <TableCell data-label="Magaca" className="font-medium">{pp.provider_name}</TableCell>
-                      <TableCell data-label="Prefix" className="font-mono">
+                      <TableCell className="font-medium">{pp.provider_name}</TableCell>
+                      <TableCell className="font-mono">
                         {isEditing ? <Input className="w-20" value={editing.prefix_code ?? ''} onChange={(e) => setEditing({ ...editing, prefix_code: e.target.value })} /> : (pp.prefix_code || '-')}
                       </TableCell>
-                      <TableCell data-label="Number" className="font-mono">
+                      <TableCell className="font-mono">
                         {isEditing ? <Input className="w-36" value={editing.payment_number ?? ''} onChange={(e) => setEditing({ ...editing, payment_number: e.target.value })} /> : (pp.payment_number || '-')}
                       </TableCell>
-                      <TableCell data-label="USSD" className="font-mono text-xs">
+                      <TableCell className="font-mono text-xs">
                         {isEditing ? <Input className="w-44" value={editing.ussd_code_template ?? ''} onChange={(e) => setEditing({ ...editing, ussd_code_template: e.target.value })} /> : (pp.ussd_code_template || '-')}
                       </TableCell>
-                      <TableCell data-label="Commission">
+                      <TableCell>
                         {isEditing ? <Input className="w-20" type="number" step="0.01" value={editing.commission_rate} onChange={(e) => setEditing({ ...editing, commission_rate: parseFloat(e.target.value) || 0 })} /> : `${pp.commission_rate}%`}
                       </TableCell>
-                      <TableCell data-label="Falal">
+                      <TableCell>
                         <div className="flex gap-1">
                           {isEditing ? (
                             <Button size="sm" onClick={saveEdit}><Save className="h-4 w-4" /></Button>

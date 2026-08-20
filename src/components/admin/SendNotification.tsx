@@ -127,13 +127,13 @@ export function SendNotification() {
         <CardHeader>
           <CardTitle>Fariimaha La Diray</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : notifications && notifications.length > 0 ? (
-            <Table className="mobile-table">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Title</TableHead>
@@ -145,12 +145,12 @@ export function SendNotification() {
               <TableBody>
                 {notifications.map((notif) => (
                   <TableRow key={notif.id}>
-                    <TableCell data-label="Title" className="font-medium">{notif.title}</TableCell>
-                    <TableCell data-label="Message" className="max-w-[300px] truncate">{notif.message}</TableCell>
-                    <TableCell data-label="Taariikhda">
+                    <TableCell className="font-medium">{notif.title}</TableCell>
+                    <TableCell className="max-w-[300px] truncate">{notif.message}</TableCell>
+                    <TableCell>
                       {format(new Date(notif.created_at), "MMM dd, yyyy HH:mm")}
                     </TableCell>
-                    <TableCell data-label="Actions">
+                    <TableCell>
                       <Button
                         variant="ghost"
                         size="icon"
