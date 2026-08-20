@@ -18,7 +18,7 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { logScreenView } from '@/services/firebase';
 import { useConnectivity } from '@/contexts/ConnectivityContext';
-import { useTenant } from '@/contexts/TenantContext';
+import { useBrand } from '@/hooks/useBrand';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Provider {
@@ -35,21 +35,6 @@ const PROVIDER_COLORS: Record<string, { bg: string; ring: string }> = {
   somlink: { bg: '#cc2200', ring: '#cc2200' },
   somnet:  { bg: '#0055cc', ring: '#0055cc' },
   amtel:   { bg: '#8800cc', ring: '#8800cc' },
-};
-
-const HEADER_BLUE = '#0066CC';
-const HEADER_BLUE_DARK = '#004fa3';
-
-// Darken a hex color by a ratio (0-1) for the header gradient
-const shadeHex = (hex: string, ratio = 0.25) => {
-  const m = /^#?([a-f\d]{6})$/i.exec(hex.trim());
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-    .map((v) => Math.max(0, Math.round(v * (1 - ratio))))
-    .map((v) => v.toString(16).padStart(2, '0'))
-    .join('');
-  return `#${c}`;
 };
 
 const getProviderColor = (name: string) => {
@@ -232,10 +217,7 @@ const ProviderSelection = () => {
   );
 
   // Tenant (reseller) branding — falls back to default app brand
-  const { tenant, logoUrl } = useTenant();
-  const brandName = tenant?.name || 'Iftin Internet';
-  const brandColor = tenant?.primary_color || HEADER_BLUE;
-  const brandColorDark = tenant?.primary_color ? shadeHex(tenant.primary_color, 0.3) : HEADER_BLUE_DARK;
+  const { logoUrl, name: brandName, primary: brandColor, primaryDark: brandColorDark } = useBrand();
 
   const handleProviderSelect = (p: Provider) => {
     if (isReallyOnline === false) {
@@ -317,8 +299,8 @@ const ProviderSelection = () => {
           }}
         >
           <RefreshCw
-            className={`w-5 h-5 text-[${HEADER_BLUE}] ${isRefreshing ? 'animate-spin' : ''}`}
-            style={{ transform: `rotate(${pullDistance * 2}deg)`, color: HEADER_BLUE }}
+            className={`w-5 h-5 text-[${brandColor}] ${isRefreshing ? 'animate-spin' : ''}`}
+            style={{ transform: `rotate(${pullDistance * 2}deg)`, color: brandColor }}
           />
         </div>
 
@@ -338,7 +320,7 @@ const ProviderSelection = () => {
           <div
             className="relative overflow-hidden rounded-2xl text-white p-5 shadow-lg"
             style={{
-              background: `linear-gradient(135deg, ${HEADER_BLUE} 0%, #1a8cff 50%, #4dabff 100%)`,
+              background: `linear-gradient(135deg, ${brandColorDark} 0%, ${brandColor} 55%, ${brandColor} 100%)`,
               minHeight: '140px',
             }}
           >
@@ -376,7 +358,7 @@ const ProviderSelection = () => {
             <h3 className="text-base font-bold text-gray-900">Shirkadaha</h3>
             <button
               className="text-sm font-semibold"
-              style={{ color: HEADER_BLUE }}
+              style={{ color: brandColor }}
               onClick={() => setSearch('')}
             >
               Dhammaan
@@ -398,7 +380,7 @@ const ProviderSelection = () => {
                       ? 'bg-blue-50 ring-2'
                       : 'bg-white ring-1 ring-gray-200 hover:ring-gray-300'
                   } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  style={isSelected ? { boxShadow: `0 0 0 2px ${HEADER_BLUE}` } : undefined}
+                  style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
                 >
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
@@ -448,7 +430,7 @@ const ProviderSelection = () => {
         className={`fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all duration-300 ${
           showContactSheet ? 'bg-red-500' : ''
         }`}
-        style={!showContactSheet ? { backgroundColor: HEADER_BLUE } : undefined}
+        style={!showContactSheet ? { backgroundColor: brandColor } : undefined}
       >
         {showContactSheet ? (
           <X className="w-7 h-7 text-white" />
@@ -457,7 +439,7 @@ const ProviderSelection = () => {
             <Phone className="w-7 h-7 text-white" />
             <span
               className="absolute -top-1 -right-1 bg-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2"
-              style={{ color: HEADER_BLUE, borderColor: HEADER_BLUE }}
+              style={{ color: brandColor, borderColor: brandColor }}
             >
               24
             </span>
@@ -471,7 +453,7 @@ const ProviderSelection = () => {
             href="tel:+252617195659"
             onClick={() => setShowContactSheet(false)}
             className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
-            style={{ backgroundColor: HEADER_BLUE }}
+            style={{ backgroundColor: brandColor }}
           >
             <Phone className="w-7 h-7 text-white" />
           </a>
