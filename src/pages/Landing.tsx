@@ -11,6 +11,10 @@ import {
   Check,
 } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
+import ContactDialog from '@/components/landing/ContactDialog';
+import heroDashboard from '@/assets/landing/hero-dashboard.jpg';
+import missionYouth from '@/assets/landing/mission-youth.jpg';
+import automationFlow from '@/assets/landing/automation-flow.jpg';
 
 const BRAND = '#004ac6';
 const font = { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' };
@@ -57,15 +61,16 @@ const Landing = () => {
               </a>
             ))}
           </nav>
-          <a
-            href="https://wa.link/ake9qi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-[10px] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-            style={{ backgroundColor: '#2563eb' }}
-          >
-            Nala soo xiriir
-          </a>
+          <ContactDialog
+            trigger={
+              <button
+                className="rounded-[10px] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                style={{ backgroundColor: '#2563eb' }}
+              >
+                Nala soo xiriir
+              </button>
+            }
+          />
         </div>
       </header>
 
