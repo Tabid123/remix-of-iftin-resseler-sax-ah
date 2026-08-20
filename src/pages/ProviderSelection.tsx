@@ -130,6 +130,26 @@ const ProviderSelection = () => {
   });
 
   // Prefetch categories + per-provider packages (preserved)
+  const { data: providerRates = {} } = useQuery<Record<string, number>>({
+    queryKey: ['provider-top-rates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('provider_wholesale_tiers')
+        .select('provider_id, profit_rate')
+        .eq('is_active', true);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((t: any) => {
+        const cur = map[t.provider_id];
+        const val = Number(t.profit_rate) || 0;
+        if (cur === undefined || val > cur) map[t.provider_id] = val;
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   useEffect(() => {
     if (!providers.length) return;
     queryClient.prefetchQuery({
