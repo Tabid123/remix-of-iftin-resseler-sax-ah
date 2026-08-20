@@ -52,6 +52,94 @@ Deno.serve(async (req) => {
       return affected;
     };
 
+    if (action === "source_providers") {
+      const { source_slug, tenant_id } = body;
+      const slug = source_slug || "iftin";
+      const { data: src } = await supabaseAdmin
+        .from("tenants")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (!src) throw new Error(`Source tenant ${slug} lama helin`);
+      const { data: provs } = await supabaseAdmin
+        .from("providers_config")
+        .select("provider_name, display_order")
+        .eq("tenant_id", src.id)
+        .order("display_order", { ascending: true });
+      let existing: string[] = [];
+      if (tenant_id) {
+        const { data: tp } = await supabaseAdmin
+          .from("providers_config")
+          .select("provider_name")
+          .eq("tenant_id", tenant_id);
+        existing = (tp ?? []).map((p: any) => p.provider_name);
+      }
+      const seen = new Set<string>();
+      const providers = (provs ?? [])
+        .map((p: any) => p.provider_name as string)
+        .filter((n) => {
+          const k = n.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      return json({ providers, existing });
+    }
+
+    if (action === "create") {
+      const { name, slug, email, password, primary_color, secondary_color } = body;
+      if (!name || !slug || !email || !password || String(password).length < 6) {
+        throw new Error("Magaca, slug, email iyo password (6+) waa loo baahan yahay");
+      }
+      const cleanSlug = String(slug).trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      const { data: dup } = await supabaseAdmin
+        .from("tenants")
+        .select("id")
+        .eq("slug", cleanSlug)
+        .maybeSingle();
+      if (dup) throw new Error("Slug-gan hore ayaa loo isticmaalay");
+
+      const { data: created, error: uErr } = await supabaseAdmin.auth.admin.createUser({
+        email: String(email).trim(),
+        password: String(password),
+        email_confirm: true,
+        user_metadata: { skip_auto_tenant: "true", company_name: name },
+      });
+      if (uErr || !created?.user) throw new Error(uErr?.message || "User lama abuurin");
+      const userId = created.user.id;
+
+      const { data: tenant, error: tInsErr } = await supabaseAdmin
+        .from("tenants")
+        .insert({
+          slug: cleanSlug,
+          name: String(name).trim(),
+          owner_id: userId,
+          plan: "free",
+          status: "active",
+          primary_color: primary_color || "#000000",
+          secondary_color: secondary_color || "#ffffff",
+        })
+        .select("id, slug, name")
+        .single();
+      if (tInsErr) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        throw tInsErr;
+      }
+
+      await supabaseAdmin
+        .from("tenant_members")
+        .insert({ tenant_id: tenant.id, user_id: userId, member_role: "owner", role: "owner" });
+
+      await supabaseAdmin.from("tenant_admin_credentials").insert({
+        tenant_id: tenant.id,
+        user_id: userId,
+        email: String(email).trim(),
+        initial_password: String(password),
+      });
+
+      return json({ success: true, tenant });
+    }
+
     if (action === "update") {
       const { tenant_id, plan, status } = body;
       if (!tenant_id) throw new Error("tenant_id required");

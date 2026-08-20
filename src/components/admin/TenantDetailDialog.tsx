@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Copy, Eye, EyeOff, Link2, Lock, Loader2, Ban, CheckCircle2, Trash2, KeyRound } from "lucide-react";
+import { PackagePlus } from "lucide-react";
+import ProviderClonePicker from "./ProviderClonePicker";
 
 interface Props {
   tenantId: string | null;
@@ -46,6 +48,9 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
   const [showPw, setShowPw] = useState<Record<string, boolean>>({});
   const [newPw, setNewPw] = useState<Record<string, string>>({});
   const [confirmSlug, setConfirmSlug] = useState("");
+  const [cloneSel, setCloneSel] = useState<string[]>([]);
+  const [cloning, setCloning] = useState(false);
+  const [pickerKey, setPickerKey] = useState(0);
 
   const call = async (body: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke("superadmin-tenants", { body });
@@ -74,6 +79,8 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
       setConfirmSlug("");
       setShowPw({});
       setNewPw({});
+      setCloneSel([]);
+      setPickerKey((k) => k + 1);
       load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,6 +112,29 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
   };
 
   const suspended = tenant?.status === "suspended";
+
+  const cloneProviders = async () => {
+    if (!tenantId || cloneSel.length === 0) return;
+    setCloning(true);
+    try {
+      const { data, error } = await supabase.rpc("clone_tenant_providers", {
+        _target_tenant: tenantId,
+        _provider_names: cloneSel,
+      } as any);
+      if (error) throw error;
+      const r: any = data ?? {};
+      toast.success(
+        `Waa la ku daray — shirkado ${r.providers ?? 0}, qaybo ${r.categories ?? 0}, xirmooyin ${r.packages ?? 0}, flows ${r.flows ?? 0}`
+      );
+      setCloneSel([]);
+      setPickerKey((k) => k + 1);
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCloning(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,6 +192,26 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 text-sm font-semibold">
+                <PackagePlus className="h-4 w-4" /> Shirkado ku dar
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Flows-ka USSD, qaybaha, xirmooyinka, SIM PIN iyo wholesale tiers ayaa la koobiyeynayaa.
+              </p>
+              <ProviderClonePicker
+                key={pickerKey}
+                tenantId={tenantId}
+                selected={cloneSel}
+                onChange={setCloneSel}
+              />
+              <Button size="sm" onClick={cloneProviders} disabled={cloning || cloneSel.length === 0}>
+                {cloning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Ku dar shirkadaha
+              </Button>
             </div>
 
             <Separator />
