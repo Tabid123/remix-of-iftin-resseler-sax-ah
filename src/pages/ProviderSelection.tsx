@@ -18,6 +18,7 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { logScreenView } from '@/services/firebase';
 import { useConnectivity } from '@/contexts/ConnectivityContext';
+import { useTenant } from '@/contexts/TenantContext';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Provider {
