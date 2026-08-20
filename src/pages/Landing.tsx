@@ -1,306 +1,325 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import {
-  Zap,
-  ShieldCheck,
-  WifiOff,
-  Clock,
-  Smartphone,
+  Rocket,
   ArrowRight,
-  Phone,
-  MessageCircle,
+  Zap,
+  PiggyBank,
+  UserCog,
+  CheckCircle2,
+  LayoutDashboard,
   Check,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useBrand, shadeHex } from '@/hooks/useBrand';
+import { useBrand } from '@/hooks/useBrand';
 
-interface Provider {
-  id: string;
-  provider_name: string;
-  provider_logo: string | null;
-}
+const BRAND = '#004ac6';
+const font = { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' };
 
 const FEATURES = [
-  {
-    icon: Zap,
-    title: 'Gaarsiin Degdeg ah',
-    text: 'Xirmadaada waxaa lagu gaarsiiyaa ilbidhiqsiyo gudahood, si otomaatig ah 24/7.',
-  },
-  {
-    icon: WifiOff,
-    title: 'Offline ayuu Shaqeeyaa',
-    text: 'Xitaa adigoon internet haysan, USSD ayaad ku dalban kartaa.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Lacag Bixin Ammaan ah',
-    text: 'EVC Plus, e-Dahab iyo Jeeb — lacag bixin toos ah oo la hubiyay.',
-  },
-  {
-    icon: Clock,
-    title: 'Adeeg 24 Saac',
-    text: 'Habeen iyo maalin — nidaamku waa firfircoon yahay waqti kasta.',
-  },
+  { icon: Zap, title: 'Automation Degdeg ah', text: 'Nidaam si toos ah ugu dira Data Bundles-ka macaamiisha ilbiriqsiyo gudahood.' },
+  { icon: PiggyBank, title: 'Qiimaha Jumlada', text: 'Hel qiimaha ugu jaban ee jumlada ah ee 5-ta shirkadood ee ugu waaweyn isgaarsiinta.' },
+  { icon: UserCog, title: 'Maareyn 24/7 ah', text: 'Maamul xisaabtaada, warbixinaha, iyo iibka waqti kasta iyo goob kasta.' },
 ];
 
-const STEPS = [
-  { n: '1', title: 'Dooro Shirkadda', text: 'Hormuud, Somtel, Somnet ama Amtel.' },
-  { n: '2', title: 'Geli Lambarka', text: 'Lambarka aad rabto in lagu shubo.' },
-  { n: '3', title: 'Bixi Lacagta', text: 'USSD kaliya hal taabasho.' },
-  { n: '4', title: 'Hel Xirmadaada', text: 'Si otomaatig ah ayaa laguu gaarsiiyaa.' },
+const CARRIERS = ['Hormuud', 'Somtel', 'Telesom', 'Golis', 'SomNet'];
+
+const NAV = [
+  { label: 'Adeegyada', href: '#adeegyada' },
+  { label: 'Qiimaha', href: '#qiimaha' },
+  { label: 'Shirkadaha', href: '#shirkadaha' },
+  { label: 'Ku Saabsan', href: '#kusaabsan' },
 ];
 
 const Landing = () => {
   const navigate = useNavigate();
-  const { logoUrl, name: brandName, primary, primaryDeep } = useBrand();
+  const { logoUrl } = useBrand();
+  const brandName = 'Iftin Resellers';
 
   useEffect(() => {
-    document.title = `${brandName} — Jumlo Internet & Bixin Degdeg ah`;
-  }, [brandName]);
-
-  const { data: providers = [] } = useQuery<Provider[]>({
-    queryKey: ['landing-providers'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_active_providers');
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+    document.title = `${brandName} — Nidaamka Tooska ah ee Data Bundles-ka Jumlada`;
+  }, []);
 
   return (
-    <div className="min-h-screen bg-[#f5f7fa]">
+    <div className="min-h-screen scroll-smooth bg-[#f8f9ff] text-[#0b1c30]" style={font}>
       {/* NAV */}
-      <header className="sticky top-0 z-40 backdrop-blur bg-white/85 border-b border-gray-100">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+      <header className="sticky top-0 z-40 border-b border-[#dbe1ff] bg-[#f8f9ff]/90 backdrop-blur">
+        <div className="mx-auto flex max-w-[1280px] items-center justify-between px-5 py-4 md:px-20">
           <div className="flex items-center gap-2.5">
-            {logoUrl ? (
-              <img src={logoUrl} alt={`${brandName} logo`} className="h-9 w-9 rounded-xl object-cover" />
-            ) : (
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-extrabold text-white"
-                style={{ backgroundColor: primary }}
-              >
-                {brandName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span className="text-base font-extrabold tracking-tight text-gray-900">{brandName}</span>
+            {logoUrl && <img src={logoUrl} alt={`${brandName} logo`} className="h-8 w-8 rounded-lg object-cover" />}
+            <span className="text-[17px] font-extrabold tracking-tight" style={{ color: BRAND }}>
+              {brandName}
+            </span>
           </div>
-          <button
-            onClick={() => navigate('/providers')}
-            className="rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
-            style={{ backgroundColor: primary }}
+          <nav className="hidden items-center gap-8 md:flex">
+            {NAV.map((n) => (
+              <a key={n.href} href={n.href} className="text-[15px] font-medium text-[#434655] transition hover:text-[#004ac6]">
+                {n.label}
+              </a>
+            ))}
+          </nav>
+          <a
+            href="https://wa.link/ake9qi"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-[10px] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+            style={{ backgroundColor: '#2563eb' }}
           >
-            Bilow
-          </button>
+            Nala soo xiriir
+          </a>
         </div>
       </header>
 
       {/* HERO */}
-      <section className="relative overflow-hidden" style={{ backgroundColor: primary }}>
-        <div
-          className="absolute -right-24 -top-24 h-72 w-72 rounded-full"
-          style={{ backgroundColor: 'rgba(255,255,255,0.10)' }}
-        />
-        <div
-          className="absolute -bottom-20 -left-16 h-56 w-56 rounded-full"
-          style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}
-        />
-        <div className="relative mx-auto max-w-6xl px-4 py-16 text-white md:py-24">
-          <span className="inline-block rounded-full bg-white/20 px-3 py-1 text-[11px] font-semibold backdrop-blur">
-            Jumlo Internet • Somalia
-          </span>
-          <h1 className="mt-4 max-w-2xl text-4xl font-extrabold leading-[1.1] tracking-tight md:text-6xl">
-            Internet-ka Jumlada ah <br className="hidden md:block" /> ee ugu Qiimaha Jaban
-          </h1>
-          <p className="mt-4 max-w-xl text-base font-medium text-white/85 md:text-lg">
-            {brandName} wuxuu kuu keenaa xirmooyin internet ah oo tayo sare leh, qiimo jumlo ah,
-            gaarsiin otomaatig ah — xitaa offline.
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button
-              onClick={() => navigate('/providers')}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-extrabold shadow-lg transition hover:scale-[1.03]"
-              style={{ color: primary }}
-            >
-              Hadda Bilow <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => navigate('/download-app')}
-              className="inline-flex items-center gap-2 rounded-full bg-white/15 px-6 py-3 text-sm font-bold text-white ring-1 ring-white/30 transition hover:bg-white/25"
-            >
-              <Smartphone className="h-4 w-4" /> Soo Dejiso App-ka
-            </button>
+      <section className="bg-[#eff4ff]">
+        <div className="mx-auto grid max-w-[1280px] items-center gap-12 px-5 py-20 md:grid-cols-2 md:px-20 md:py-[120px]">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[#dbe1ff] px-3 py-1.5 text-xs font-semibold text-[#003ea8]">
+              <Rocket className="h-3.5 w-3.5" /> SaaS Platform loogu talagalay Jumlada
+            </span>
+            <h1 className="mt-6 text-[38px] font-extrabold leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.08]">
+              Nidaamka Tooska ah ee{' '}
+              <span style={{ color: BRAND }}>Data Bundles-ka Jumlad ah</span>
+            </h1>
+            <p className="mt-5 max-w-lg text-[16px] leading-7 text-[#434655]">
+              Waxaan bixinaa nidaam si toos ah u bixiya xirmooyinka internet-ka jumlada ah ee 5-ta shirkadood ee
+              waaweyn: Hormuud, Somtel, Telesom, Golis, iyo SomNet.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => navigate('/providers')}
+                className="inline-flex items-center gap-2 rounded-[10px] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-90"
+                style={{ backgroundColor: '#2563eb' }}
+              >
+                Bilow Hadda <ArrowRight className="h-4 w-4" />
+              </button>
+              <a
+                href="#adeegyada"
+                className="inline-flex items-center rounded-[10px] border border-[#c3c6d7] bg-white px-6 py-3 text-sm font-semibold text-[#434655] transition hover:bg-[#eff4ff]"
+              >
+                Sida ay u shaqeyso
+              </a>
+            </div>
           </div>
-
-          <div className="mt-10 grid max-w-lg grid-cols-3 gap-3">
-            {[
-              { k: '24/7', v: 'Adeeg' },
-              { k: '<60s', v: 'Gaarsiin' },
-              { k: '100%', v: 'Otomaatig' },
-            ].map((s) => (
-              <div key={s.k} className="rounded-2xl bg-white/10 p-3 text-center backdrop-blur">
-                <p className="text-xl font-extrabold md:text-2xl">{s.k}</p>
-                <p className="text-[11px] font-medium text-white/75">{s.v}</p>
+          <div className="rounded-xl bg-white p-4 shadow-[0_20px_60px_-25px_rgba(0,74,198,0.45)] ring-1 ring-[#dbe1ff]">
+            <div className="rounded-lg bg-[#dce9ff] p-6">
+              <div className="flex items-center gap-1.5">
+                {['#ba1a1a', '#e0b400', '#1f9d55'].map((c) => (
+                  <span key={c} className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
+                ))}
               </div>
-            ))}
+              <div className="mt-4 space-y-3">
+                <div className="h-24 rounded-lg bg-white/80" />
+                <div className="grid grid-cols-3 gap-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-16 rounded-lg bg-white/80" />
+                  ))}
+                </div>
+                <div className="h-8 w-2/3 rounded-lg bg-white/80" />
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
-
-      {/* PROVIDERS */}
-      <section className="mx-auto max-w-6xl px-4 py-14">
-        <h2 className="text-center text-2xl font-extrabold tracking-tight text-gray-900 md:text-3xl">
-          Shirkadaha aan la shaqeyno
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
-          Dhammaan shabakadaha waaweyn ee Soomaaliya hal meel.
-        </p>
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {providers.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => navigate('/providers')}
-              className="flex flex-col items-center gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 transition hover:-translate-y-1 hover:shadow-md"
-            >
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-gray-100">
-                {p.provider_logo ? (
-                  <img src={p.provider_logo} alt={`${p.provider_name} logo`} className="h-full w-full object-contain" />
-                ) : (
-                  <span className="text-sm font-extrabold text-gray-700">
-                    {p.provider_name.slice(0, 3).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <span className="text-sm font-bold text-gray-900">{p.provider_name}</span>
-            </button>
-          ))}
-          {providers.length === 0 &&
-            ['Hormuud', 'Somtel', 'Somnet', 'Amtel'].map((n) => (
-              <div key={n} className="rounded-2xl bg-white p-5 text-center shadow-sm ring-1 ring-gray-100">
-                <span className="text-sm font-bold text-gray-900">{n}</span>
-              </div>
-            ))}
         </div>
       </section>
 
       {/* FEATURES */}
-      <section className="bg-white py-14">
-        <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-2xl font-extrabold tracking-tight text-gray-900 md:text-3xl">
-            Maxaad noogu kalsoonaan kartaa?
+      <section id="adeegyada" className="bg-white py-20 md:py-[120px]">
+        <div className="mx-auto max-w-[1280px] px-5 md:px-20">
+          <h2 className="text-center text-[28px] font-bold tracking-tight md:text-[32px]">
+            Maxaad u dooraneysaa {brandName}?
           </h2>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <p className="mx-auto mt-3 max-w-xl text-center text-[15px] text-[#434655]">
+            Nidaam toos ah, qiimo jaban, iyo taageero joogto ah si aad u guuleysato.
+          </p>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
             {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-2xl bg-[#f7f9fc] p-5 ring-1 ring-gray-100 transition hover:-translate-y-1 hover:shadow-md"
-              >
+              <div key={f.title} className="rounded-xl bg-[#eff4ff] p-6 ring-1 ring-[#dbe1ff]">
                 <div
-                  className="flex h-11 w-11 items-center justify-center rounded-xl text-white"
-                  style={{ backgroundColor: primary }}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-white"
+                  style={{ backgroundColor: '#2563eb' }}
                 >
                   <f.icon className="h-5 w-5" />
                 </div>
-                <h3 className="mt-4 text-base font-bold text-gray-900">{f.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-gray-500">{f.text}</p>
+                <h3 className="mt-5 text-[18px] font-bold">{f.title}</h3>
+                <p className="mt-2 text-[15px] leading-6 text-[#434655]">{f.text}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
-      <section className="mx-auto max-w-6xl px-4 py-14">
-        <h2 className="text-center text-2xl font-extrabold tracking-tight text-gray-900 md:text-3xl">
-          Sidee u shaqeeyaa?
-        </h2>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((s) => (
-            <div key={s.n} className="relative rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-extrabold text-white"
-                style={{ backgroundColor: primaryDeep }}
-              >
-                {s.n}
-              </span>
-              <h3 className="mt-3.5 text-base font-bold text-gray-900">{s.title}</h3>
-              <p className="mt-1 text-sm text-gray-500">{s.text}</p>
-            </div>
-          ))}
+      {/* MISSION */}
+      <section id="kusaabsan" className="bg-[#dce9ff] py-20 md:py-[120px]">
+        <div className="mx-auto grid max-w-[1280px] items-center gap-12 px-5 md:grid-cols-2 md:px-20">
+          <div className="h-72 rounded-xl bg-[#b4c5ff] md:h-96" />
+          <div>
+            <h2 className="text-[28px] font-bold leading-tight tracking-tight md:text-[32px]">
+              Dhiirigelinta Dhalinyarada
+            </h2>
+            <p className="mt-5 text-[15px] leading-7 text-[#434655]">
+              {brandName} ma aha kaliya shirkad bixisa adeegyo farsamo. Hadafkayaga ugu weyn waa inaan awoodsiino
+              dhalinyarada shaqo la'aanta ah.
+            </p>
+            <p className="mt-4 text-[15px] leading-7 text-[#434655]">
+              Waxaan siinaa qalabka iyo teknolojiyadda ay ugu baahan yihiin inay ku abuuraan ganacsiyo u gaar ah oo
+              la xiriira internetka (Data Bundles). Adigoo adeegsanaya nidaamkayaga kireysiga, waxaad noqon kartaa
+              maamule ganacsi adigoo gurigaaga jooga.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {[
+                'Sumeysi u gaar ah (White-label Apps)',
+                'Maamul xogaha macaamiisha si sahlan',
+                'Warbixino iyo dabagal ganacsi',
+              ].map((i) => (
+                <li key={i} className="flex items-center gap-2.5 text-[15px] font-medium text-[#0b1c30]">
+                  <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: BRAND }} /> {i}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
-      {/* RESELLER CTA */}
-      <section className="mx-auto max-w-6xl px-4 pb-14">
-        <div
-          className="relative overflow-hidden rounded-3xl p-8 text-white md:p-12"
-          style={{ backgroundColor: shadeHex(primary, 0.15) }}
-        >
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
-          <div className="relative max-w-xl">
-            <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">
-              Ma rabtaa inaad noqoto Reseller?
-            </h2>
-            <p className="mt-2 text-sm text-white/85 md:text-base">
-              Hel dashboard gaar ah, calaamad shirkadaada u gaar ah, iyo faa'iido joogto ah.
-            </p>
-            <ul className="mt-5 space-y-2">
-              {['Dashboard gaar ah', 'Logo & midab shirkadaada', 'Gaarsiin otomaatig ah', 'Taageero degdeg ah'].map(
-                (i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm font-medium">
-                    <Check className="h-4 w-4 shrink-0" /> {i}
-                  </li>
-                )
-              )}
-            </ul>
-            <a
-              href="https://wa.link/ake9qi"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-extrabold shadow-lg transition hover:scale-[1.03]"
-              style={{ color: shadeHex(primary, 0.2) }}
-            >
-              <MessageCircle className="h-4 w-4" /> Nala Soo Xiriir
-            </a>
+      {/* CARRIERS */}
+      <section id="shirkadaha" className="bg-white py-20 md:py-[120px]">
+        <div className="mx-auto max-w-[1280px] px-5 md:px-20">
+          <h2 className="text-center text-[28px] font-bold tracking-tight md:text-[32px]">Shirkadaha Aan La Shaqeyno</h2>
+          <p className="mx-auto mt-3 max-w-xl text-center text-[15px] text-[#434655]">
+            Waxaan isku xirnay 5-ta shirkadood ee ugu waaweyn Isgaarsiinta Soomaaliya, si toos ah oo automated ah.
+          </p>
+          <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {CARRIERS.map((c) => (
+              <div
+                key={c}
+                className="flex h-24 items-center justify-center rounded-xl bg-[#eff4ff] text-[15px] font-semibold ring-1 ring-[#dbe1ff]"
+                style={{ color: BRAND }}
+              >
+                {c}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 rounded-xl bg-white p-6 ring-1 ring-[#dbe1ff]">
+            <p className="text-center text-[16px] font-semibold">Muuqaalka Nidaamka Tooska ah (Automated Dashboard)</p>
+            <div className="mt-5 flex h-56 flex-col items-center justify-center gap-3 rounded-lg bg-[#dbe1ff] text-[#434655] md:h-72">
+              <LayoutDashboard className="h-7 w-7" />
+              <span className="text-xs font-medium">Dashboard Transaction Flow Simulation</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PRICING */}
+      <section id="qiimaha" className="bg-[#eff4ff] py-20 md:py-[120px]">
+        <div className="mx-auto max-w-[1280px] px-5 md:px-20">
+          <h2 className="text-center text-[28px] font-bold tracking-tight md:text-[32px]">Qorshaha Qiimaha</h2>
+          <p className="mx-auto mt-3 max-w-xl text-center text-[15px] text-[#434655]">
+            Dooro qorshaha ku habboon ganacsigaaga. Hufnaan iyo qiimo aan is-bedbedelin.
+          </p>
+
+          <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+            {/* Rent */}
+            <div className="rounded-xl bg-white p-7 ring-1 ring-[#dbe1ff]">
+              <h3 className="text-[20px] font-bold">Kireysi (Monthly)</h3>
+              <p className="mt-2 text-[14px] leading-6 text-[#434655]">
+                Ku habboon ganacsiyada yaryar iyo kuwa hadda bilaabaya nidaamka kireysiga.
+              </p>
+              <p className="mt-6 text-[38px] font-extrabold">
+                $50 <span className="text-[14px] font-medium text-[#434655]">/bishii</span>
+              </p>
+              <ul className="mt-6 space-y-3">
+                {['App diyaar ah dhowr maalmood', 'Hosting iyo Maintenance waa ku jiraan', 'Taageero Farsamo 24/7'].map(
+                  (i) => (
+                    <li key={i} className="flex items-start gap-2 text-[14px] text-[#434655]">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: BRAND }} /> {i}
+                    </li>
+                  )
+                )}
+              </ul>
+              <a
+                href="https://wa.link/ake9qi"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-7 block rounded-[10px] border border-[#c3c6d7] py-3 text-center text-sm font-semibold text-[#0b1c30] transition hover:bg-[#eff4ff]"
+              >
+                Dalbo Kireysi
+              </a>
+            </div>
+
+            {/* Buy */}
+            <div className="relative rounded-xl bg-white p-7 ring-2" style={{ borderColor: BRAND, boxShadow: '0 20px 50px -30px rgba(0,74,198,.6)', ['--tw-ring-color' as string]: BRAND }}>
+              <span
+                className="absolute -top-3 right-6 rounded-full px-3 py-1 text-[11px] font-semibold text-white"
+                style={{ backgroundColor: '#2563eb' }}
+              >
+                Lagu Taliyay
+              </span>
+              <h3 className="text-[20px] font-bold">Iib Toos ah</h3>
+              <p className="mt-2 text-[14px] leading-6 text-[#434655]">
+                Iibka rasmiga ah ee nidaamka. La yeelo lahaansho buuxda.
+              </p>
+              <p className="mt-6 text-[38px] font-extrabold">
+                $800 <span className="text-[14px] font-medium text-[#434655]">/mar qura</span>
+              </p>
+              <ul className="mt-6 space-y-3">
+                {['Lahaansho buuxda ee Nidaamka', 'Noocyo u gaar ah (Custom Features)', 'Taageero tababar bilowga'].map(
+                  (i) => (
+                    <li key={i} className="flex items-start gap-2 text-[14px] text-[#434655]">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: BRAND }} /> {i}
+                    </li>
+                  )
+                )}
+              </ul>
+              <a
+                href="https://wa.link/ake9qi"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-7 block rounded-[10px] py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                style={{ backgroundColor: '#2563eb' }}
+              >
+                Dalbo Iib
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-gray-100 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row">
-          <p className="text-sm text-gray-500">
-            © {new Date().getFullYear()} {brandName}. Dhammaan xuquuqda way dhowran tahay.
-          </p>
-          <div className="flex items-center gap-3">
-            <a
-              href="tel:+252617195659"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white"
-              style={{ backgroundColor: primary }}
-              aria-label="Wac"
-            >
-              <Phone className="h-4 w-4" />
-            </a>
-            <a
-              href="https://wa.link/ake9qi"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white"
-              aria-label="WhatsApp"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </a>
-            <button
-              onClick={() => navigate('/privacy-policy')}
-              className="text-sm font-medium text-gray-500 hover:text-gray-900"
-            >
-              Privacy
-            </button>
+      <footer className="bg-[#e5eeff] pt-16">
+        <div className="mx-auto grid max-w-[1280px] gap-10 px-5 pb-10 md:grid-cols-4 md:px-20">
+          <div>
+            <p className="text-[15px] font-extrabold" style={{ color: BRAND }}>{brandName}</p>
+            <p className="mt-3 max-w-xs text-[13px] leading-6 text-[#434655]">
+              SaaS platform-ka ugu horreeya ee Soomaalida, waxaan dhisnaa oo aan kireynaa internet service apps casri ah.
+            </p>
           </div>
+          <div>
+            <p className="text-[14px] font-semibold">Guud ahaan</p>
+            <ul className="mt-3 space-y-2 text-[13px] text-[#434655]">
+              {NAV.slice(0, 3).map((n) => (
+                <li key={n.href}>
+                  <a href={n.href} className="hover:text-[#004ac6]">{n.label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold">Shirkadda</p>
+            <ul className="mt-3 space-y-2 text-[13px] text-[#434655]">
+              <li><a href="#kusaabsan" className="hover:text-[#004ac6]">Ku Saabsan</a></li>
+              <li><button onClick={() => navigate('/privacy-policy')} className="hover:text-[#004ac6]">Shuruudaha</button></li>
+              <li><button onClick={() => navigate('/privacy-policy')} className="hover:text-[#004ac6]">Xog-ilaalinta</button></li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold">Xiriirka</p>
+            <ul className="mt-3 space-y-2 text-[13px] text-[#434655]">
+              <li><a href="mailto:info@iftinagents.com" className="hover:text-[#004ac6]">info@iftinagents.com</a></li>
+              <li><a href="tel:+252617195659" className="hover:text-[#004ac6]">+252-617195659</a></li>
+            </ul>
+          </div>
+        </div>
+        <div className="border-t border-[#c3c6d7]/60 py-5 text-center text-[12px] text-[#434655]">
+          © {new Date().getFullYear()} {brandName}. Dhammaan xuquuqdu waa dhowran yihiin.
         </div>
       </footer>
     </div>
