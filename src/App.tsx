@@ -18,7 +18,6 @@ import { useAutoOnlineRedirect } from "@/hooks/useAutoOnlineRedirect";
 import { usePendingIntentSync } from "@/hooks/usePendingIntentSync";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ResellerRoute from "@/components/ResellerRoute";
-import Index from "./pages/Index";
 import ProviderSelection from "./pages/ProviderSelection";
 import Landing from "./pages/Landing";
 // Categories / Packages / Payment routes removed — app is now jumlo-only
