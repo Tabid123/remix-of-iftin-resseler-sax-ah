@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, Save } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface PaymentProvider {
   id: string;
@@ -29,6 +30,7 @@ const blank = {
 };
 
 export default function ResellerPaymentProviders() {
+  const { currentTenantId } = useTenant();
   const [items, setItems] = useState<PaymentProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,13 +38,18 @@ export default function ResellerPaymentProviders() {
   const [editing, setEditing] = useState<PaymentProvider | null>(null);
 
   const load = async () => {
+    if (!currentTenantId) return;
     setLoading(true);
-    const { data } = await supabase.from('payment_providers_config').select('*').order('provider_name');
+    const { data } = await supabase
+      .from('payment_providers_config')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('provider_name');
     setItems((data as PaymentProvider[]) ?? []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [currentTenantId]);
 
   const add = async () => {
     if (!form.provider_name.trim()) return;
@@ -51,6 +58,7 @@ export default function ResellerPaymentProviders() {
       ...form,
       provider_logo: form.provider_logo || null,
       commission_rate: Number(form.commission_rate) || 0,
+      tenant_id: currentTenantId,
     }]);
     setSaving(false);
     if (error) { toast({ title: 'Khalad', description: error.message, variant: 'destructive' }); return; }
@@ -66,7 +74,7 @@ export default function ResellerPaymentProviders() {
       prefix_code: editing.prefix_code,
       ussd_code_template: editing.ussd_code_template,
       commission_rate: Number(editing.commission_rate) || 0,
-    }).eq('id', editing.id);
+    }).eq('id', editing.id).eq('tenant_id', currentTenantId);
     if (error) { toast({ title: 'Khalad', description: error.message, variant: 'destructive' }); return; }
     setEditing(null);
     toast({ title: 'Guul', description: 'Waa la cusboonaysiiyay' });
@@ -75,7 +83,7 @@ export default function ResellerPaymentProviders() {
 
   const remove = async (id: string) => {
     if (!confirm('Ma hubtaa?')) return;
-    const { error } = await supabase.from('payment_providers_config').delete().eq('id', id);
+    const { error } = await supabase.from('payment_providers_config').delete().eq('id', id).eq('tenant_id', currentTenantId);
     if (error) { toast({ title: 'Khalad', description: error.message, variant: 'destructive' }); return; }
     load();
   };
