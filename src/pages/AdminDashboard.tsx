@@ -1082,9 +1082,15 @@ const AdminDashboard = () => {
           <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center px-4 gap-4">
             <SidebarTrigger />
             <div className="flex-1 flex justify-between items-center">
-              <div><h1 className="text-lg md:text-2xl font-bold">Admin Dashboard</h1></div>
+              <div className="flex items-center gap-2 min-w-0">
+                {logoUrl && <img src={logoUrl} alt={`${tenant?.name ?? 'Workspace'} logo`} className="h-8 w-8 rounded object-cover" />}
+                <h1 className="text-lg md:text-2xl font-bold truncate">{tenant?.name ?? 'Admin Dashboard'}</h1>
+              </div>
               <div className="flex items-center gap-2">
                 <LiveClock language={language} />
+                <Button onClick={() => setShowTenantSetup(true)} variant="outline" size="sm">
+                  {language === 'so' ? 'Workspace' : 'Workspace'}
+                </Button>
                 <LanguageSelector />
                 <ThemeToggle />
                 <Button onClick={handleLogout} variant="outline" size="sm"><LogOut className="h-4 w-4 mr-2" />{language === 'so' ? 'Ka bax' : 'Logout'}</Button>
