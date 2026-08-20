@@ -384,9 +384,28 @@ const ProviderSelection = () => {
                 >
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
-                    style={{ backgroundColor: colors.bg }}
+                    style={{ backgroundColor: p.provider_logo ? '#fff' : colors.bg }}
                   >
-                    {getInitials(p.provider_name)}
+                    {p.provider_logo ? (
+                      <img
+                        src={p.provider_logo}
+                        alt={`${p.provider_name} logo`}
+                        className="w-full h-full object-contain rounded-xl"
+                        loading="eager"
+                        decoding="async"
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.style.display = 'none';
+                          const parent = el.parentElement;
+                          if (parent) {
+                            parent.style.backgroundColor = colors.bg;
+                            parent.textContent = getInitials(p.provider_name);
+                          }
+                        }}
+                      />
+                    ) : (
+                      getInitials(p.provider_name)
+                    )}
                   </div>
                   <span className="text-xs font-medium text-gray-800 truncate w-full text-center">
                     {p.provider_name}
