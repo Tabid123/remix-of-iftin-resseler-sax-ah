@@ -94,7 +94,7 @@ const AppContent = () => {
       <div id="app-render-sentinel" hidden aria-hidden="true" />
       <StatusBarColor />
       <Routes>
-        <Route path="/" element={<Index />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/providers" element={<ProtectedRoute><ProviderSelection /></ProtectedRoute>} />
         {/* /offline-mode route removed */}
