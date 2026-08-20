@@ -7,6 +7,7 @@ import { Loader2, PanelLeft, RefreshCw, Volume2, AlertTriangle, Home, ChevronRig
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { ResellerSidebar, RESELLER_GROUPS } from '@/components/reseller/ResellerSidebar';
+import ResellerSimPins from '@/components/reseller/ResellerSimPins';
 import { ResellerStatCards } from '@/components/reseller/ResellerStatCards';
 
 const TransactionsDashboard = lazy(() => import('@/components/admin/TransactionsDashboard').then(m => ({ default: m.TransactionsDashboard })));
@@ -145,6 +146,7 @@ export default function ResellerDashboard() {
             {activeTab === 'daily-orders' && <DailyOrdersManager />}
             {activeTab === 'wholesale-tiers' && <WholesaleTiersManager />}
             {activeTab === 'devices' && <DeviceManagement />}
+            {activeTab === 'sim-pins' && <ResellerSimPins />}
             {activeTab === 'send-notification' && <SendNotification />}
             {activeTab === 'banners' && <ResellerBanners />}
           </Suspense>
