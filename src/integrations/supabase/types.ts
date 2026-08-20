@@ -82,6 +82,7 @@ export type Database = {
           sim1_provider: string | null
           sim2_number: string | null
           sim2_provider: string | null
+          tenant_id: string | null
           total_deliveries: number | null
         }
         Insert: {
@@ -100,6 +101,7 @@ export type Database = {
           sim1_provider?: string | null
           sim2_number?: string | null
           sim2_provider?: string | null
+          tenant_id?: string | null
           total_deliveries?: number | null
         }
         Update: {
@@ -118,9 +120,18 @@ export type Database = {
           sim1_provider?: string | null
           sim2_number?: string | null
           sim2_provider?: string | null
+          tenant_id?: string | null
           total_deliveries?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "android_devices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       apk_builds: {
         Row: {
@@ -132,6 +143,7 @@ export type Database = {
           id: string
           is_latest: boolean | null
           storage_path: string
+          tenant_id: string | null
           version: string
         }
         Insert: {
@@ -143,6 +155,7 @@ export type Database = {
           id?: string
           is_latest?: boolean | null
           storage_path: string
+          tenant_id?: string | null
           version: string
         }
         Update: {
@@ -154,9 +167,18 @@ export type Database = {
           id?: string
           is_latest?: boolean | null
           storage_path?: string
+          tenant_id?: string | null
           version?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "apk_builds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       app_settings: {
         Row: {
@@ -165,6 +187,7 @@ export type Database = {
           id: string
           setting_key: string
           setting_value: boolean | null
+          tenant_id: string | null
           text_value: string | null
           updated_at: string | null
         }
@@ -174,6 +197,7 @@ export type Database = {
           id?: string
           setting_key: string
           setting_value?: boolean | null
+          tenant_id?: string | null
           text_value?: string | null
           updated_at?: string | null
         }
@@ -183,10 +207,19 @@ export type Database = {
           id?: string
           setting_key?: string
           setting_value?: boolean | null
+          tenant_id?: string | null
           text_value?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "app_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -198,6 +231,7 @@ export type Database = {
           old_data: Json | null
           record_id: string | null
           table_name: string
+          tenant_id: string | null
           user_email: string | null
           user_id: string | null
         }
@@ -210,6 +244,7 @@ export type Database = {
           old_data?: Json | null
           record_id?: string | null
           table_name: string
+          tenant_id?: string | null
           user_email?: string | null
           user_id?: string | null
         }
@@ -222,10 +257,19 @@ export type Database = {
           old_data?: Json | null
           record_id?: string | null
           table_name?: string
+          tenant_id?: string | null
           user_email?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       auto_topup_numbers: {
         Row: {
@@ -234,6 +278,7 @@ export type Database = {
           is_active: boolean
           label: string | null
           phone_number: string
+          tenant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -241,6 +286,7 @@ export type Database = {
           is_active?: boolean
           label?: string | null
           phone_number: string
+          tenant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -248,8 +294,17 @@ export type Database = {
           is_active?: boolean
           label?: string | null
           phone_number?: string
+          tenant_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "auto_topup_numbers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       banners_config: {
         Row: {
@@ -261,6 +316,7 @@ export type Database = {
           is_active: boolean | null
           media_type: string | null
           rotation_interval: number | null
+          tenant_id: string | null
           updated_at: string | null
           video_duration: number | null
         }
@@ -273,6 +329,7 @@ export type Database = {
           is_active?: boolean | null
           media_type?: string | null
           rotation_interval?: number | null
+          tenant_id?: string | null
           updated_at?: string | null
           video_duration?: number | null
         }
@@ -285,10 +342,19 @@ export type Database = {
           is_active?: boolean | null
           media_type?: string | null
           rotation_interval?: number | null
+          tenant_id?: string | null
           updated_at?: string | null
           video_duration?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "banners_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       blocked_users: {
         Row: {
@@ -298,6 +364,7 @@ export type Database = {
           is_active: boolean
           phone_number: string
           reason: string | null
+          tenant_id: string | null
           unblocked_at: string | null
         }
         Insert: {
@@ -307,6 +374,7 @@ export type Database = {
           is_active?: boolean
           phone_number: string
           reason?: string | null
+          tenant_id?: string | null
           unblocked_at?: string | null
         }
         Update: {
@@ -316,9 +384,18 @@ export type Database = {
           is_active?: boolean
           phone_number?: string
           reason?: string | null
+          tenant_id?: string | null
           unblocked_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "blocked_users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bulk_sms_campaigns: {
         Row: {
@@ -333,6 +410,7 @@ export type Database = {
           status: string
           target_filter: Json | null
           target_type: string
+          tenant_id: string | null
           total_recipients: number
         }
         Insert: {
@@ -347,6 +425,7 @@ export type Database = {
           status?: string
           target_filter?: Json | null
           target_type?: string
+          tenant_id?: string | null
           total_recipients?: number
         }
         Update: {
@@ -361,9 +440,18 @@ export type Database = {
           status?: string
           target_filter?: Json | null
           target_type?: string
+          tenant_id?: string | null
           total_recipients?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bulk_sms_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bulk_sms_queue: {
         Row: {
@@ -376,6 +464,7 @@ export type Database = {
           sent_at: string | null
           sim_slot: number | null
           status: string
+          tenant_id: string | null
         }
         Insert: {
           campaign_id: string
@@ -387,6 +476,7 @@ export type Database = {
           sent_at?: string | null
           sim_slot?: number | null
           status?: string
+          tenant_id?: string | null
         }
         Update: {
           campaign_id?: string
@@ -398,6 +488,7 @@ export type Database = {
           sent_at?: string | null
           sim_slot?: number | null
           status?: string
+          tenant_id?: string | null
         }
         Relationships: [
           {
@@ -405,6 +496,13 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "bulk_sms_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulk_sms_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -421,6 +519,7 @@ export type Database = {
           notes: string | null
           package_id: string | null
           provider_id: string | null
+          tenant_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -434,6 +533,7 @@ export type Database = {
           notes?: string | null
           package_id?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -447,6 +547,7 @@ export type Database = {
           notes?: string | null
           package_id?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -464,6 +565,13 @@ export type Database = {
             referencedRelation: "providers_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_discounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       data_packages_config: {
@@ -479,6 +587,7 @@ export type Database = {
           profit_margin: number
           provider_id: string
           selling_price: number
+          tenant_id: string | null
           updated_at: string | null
           ussd_code: string | null
           ussd_method: Database["public"]["Enums"]["ussd_method"] | null
@@ -496,6 +605,7 @@ export type Database = {
           profit_margin: number
           provider_id: string
           selling_price: number
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_code?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
@@ -513,6 +623,7 @@ export type Database = {
           profit_margin?: number
           provider_id?: string
           selling_price?: number
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_code?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
@@ -533,6 +644,13 @@ export type Database = {
             referencedRelation: "providers_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "data_packages_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       delivery_instructions: {
@@ -546,6 +664,7 @@ export type Database = {
           package_id: string | null
           provider_id: string
           sim_password: string | null
+          tenant_id: string | null
           updated_at: string | null
           ussd_method: Database["public"]["Enums"]["ussd_method"]
         }
@@ -559,6 +678,7 @@ export type Database = {
           package_id?: string | null
           provider_id: string
           sim_password?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"]
         }
@@ -572,6 +692,7 @@ export type Database = {
           package_id?: string | null
           provider_id?: string
           sim_password?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"]
         }
@@ -597,6 +718,13 @@ export type Database = {
             referencedRelation: "providers_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "delivery_instructions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       delivery_queue: {
@@ -618,6 +746,7 @@ export type Database = {
           scheduled_at: string | null
           sim_slot: number | null
           status: string | null
+          tenant_id: string | null
           topup_amount: number | null
           ussd_code: string
         }
@@ -639,6 +768,7 @@ export type Database = {
           scheduled_at?: string | null
           sim_slot?: number | null
           status?: string | null
+          tenant_id?: string | null
           topup_amount?: number | null
           ussd_code: string
         }
@@ -660,6 +790,7 @@ export type Database = {
           scheduled_at?: string | null
           sim_slot?: number | null
           status?: string | null
+          tenant_id?: string | null
           topup_amount?: number | null
           ussd_code?: string
         }
@@ -669,6 +800,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -685,6 +823,7 @@ export type Database = {
           is_acknowledged: boolean | null
           last_sms_at: string | null
           sms_count: number | null
+          tenant_id: string | null
         }
         Insert: {
           acknowledged_at?: string | null
@@ -697,6 +836,7 @@ export type Database = {
           is_acknowledged?: boolean | null
           last_sms_at?: string | null
           sms_count?: number | null
+          tenant_id?: string | null
         }
         Update: {
           acknowledged_at?: string | null
@@ -709,8 +849,17 @@ export type Database = {
           is_acknowledged?: boolean | null
           last_sms_at?: string | null
           sms_count?: number | null
+          tenant_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "device_alerts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       devices: {
         Row: {
@@ -722,6 +871,7 @@ export type Database = {
           last_seen: string | null
           sim1_number: string | null
           sim2_number: string | null
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -733,6 +883,7 @@ export type Database = {
           last_seen?: string | null
           sim1_number?: string | null
           sim2_number?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -744,9 +895,18 @@ export type Database = {
           last_seen?: string | null
           sim1_number?: string | null
           sim2_number?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "devices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       discount_codes: {
         Row: {
@@ -759,6 +919,7 @@ export type Database = {
           is_active: boolean | null
           package_id: string | null
           provider_id: string | null
+          tenant_id: string | null
           times_used: number | null
           updated_at: string | null
           usage_limit: number | null
@@ -775,6 +936,7 @@ export type Database = {
           is_active?: boolean | null
           package_id?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           times_used?: number | null
           updated_at?: string | null
           usage_limit?: number | null
@@ -791,6 +953,7 @@ export type Database = {
           is_active?: boolean | null
           package_id?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           times_used?: number | null
           updated_at?: string | null
           usage_limit?: number | null
@@ -812,6 +975,13 @@ export type Database = {
             referencedRelation: "providers_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "discount_codes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       error_messages: {
@@ -823,6 +993,7 @@ export type Database = {
           id: string
           is_animated: boolean | null
           message: string
+          tenant_id: string | null
           title: string
           updated_at: string
         }
@@ -834,6 +1005,7 @@ export type Database = {
           id?: string
           is_animated?: boolean | null
           message: string
+          tenant_id?: string | null
           title: string
           updated_at?: string
         }
@@ -845,10 +1017,19 @@ export type Database = {
           id?: string
           is_animated?: boolean | null
           message?: string
+          tenant_id?: string | null
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "error_messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       featured_packages: {
         Row: {
@@ -857,6 +1038,7 @@ export type Database = {
           id: string
           is_active: boolean
           package_id: string
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -865,6 +1047,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           package_id: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -873,6 +1056,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           package_id?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -881,6 +1065,13 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: true
             referencedRelation: "data_packages_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "featured_packages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -899,6 +1090,7 @@ export type Database = {
           reviewed_by: string | null
           sender_phone: string
           severity: string
+          tenant_id: string | null
         }
         Insert: {
           alert_type: string
@@ -913,6 +1105,7 @@ export type Database = {
           reviewed_by?: string | null
           sender_phone: string
           severity?: string
+          tenant_id?: string | null
         }
         Update: {
           alert_type?: string
@@ -927,6 +1120,7 @@ export type Database = {
           reviewed_by?: string | null
           sender_phone?: string
           severity?: string
+          tenant_id?: string | null
         }
         Relationships: [
           {
@@ -934,6 +1128,13 @@ export type Database = {
             columns: ["payment_receipt_id"]
             isOneToOne: false
             referencedRelation: "payment_receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fraud_alerts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -944,6 +1145,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           message: string
+          tenant_id: string | null
           title: string
           updated_at: string | null
         }
@@ -952,6 +1154,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           message: string
+          tenant_id?: string | null
           title: string
           updated_at?: string | null
         }
@@ -960,10 +1163,19 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           message?: string
+          tenant_id?: string | null
           title?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       offline_registrations: {
         Row: {
@@ -974,6 +1186,7 @@ export type Database = {
           provider_name: string
           receiver_phone: string
           sender_phone: string
+          tenant_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -984,6 +1197,7 @@ export type Database = {
           provider_name: string
           receiver_phone: string
           sender_phone: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -994,6 +1208,7 @@ export type Database = {
           provider_name?: string
           receiver_phone?: string
           sender_phone?: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1002,6 +1217,13 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offline_registrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1028,6 +1250,7 @@ export type Database = {
           selling_price: number
           sender_phone: string | null
           status: string
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1051,6 +1274,7 @@ export type Database = {
           selling_price: number
           sender_phone?: string | null
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1074,6 +1298,7 @@ export type Database = {
           selling_price?: number
           sender_phone?: string | null
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1098,6 +1323,13 @@ export type Database = {
             referencedRelation: "providers_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       outreach_settings: {
@@ -1108,6 +1340,7 @@ export type Database = {
           follow_up_days: number
           id: string
           sms_template: string
+          tenant_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -1118,6 +1351,7 @@ export type Database = {
           follow_up_days?: number
           id?: string
           sms_template?: string
+          tenant_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -1128,10 +1362,19 @@ export type Database = {
           follow_up_days?: number
           id?: string
           sms_template?: string
+          tenant_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "outreach_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       outreach_targets: {
         Row: {
@@ -1148,6 +1391,7 @@ export type Database = {
           notes: string | null
           phone_number: string
           status: string
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1164,6 +1408,7 @@ export type Database = {
           notes?: string | null
           phone_number: string
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1180,9 +1425,18 @@ export type Database = {
           notes?: string | null
           phone_number?: string
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "outreach_targets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       package_categories: {
         Row: {
@@ -1193,6 +1447,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           provider_id: string | null
+          tenant_id: string | null
           updated_at: string
           ussd_method: Database["public"]["Enums"]["ussd_method"] | null
         }
@@ -1204,6 +1459,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           provider_id?: string | null
+          tenant_id?: string | null
           updated_at?: string
           ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
         }
@@ -1215,6 +1471,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           provider_id?: string | null
+          tenant_id?: string | null
           updated_at?: string
           ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
         }
@@ -1224,6 +1481,13 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1239,6 +1503,7 @@ export type Database = {
           notes: string | null
           source_package_id: string
           target_package_id: string
+          tenant_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1251,6 +1516,7 @@ export type Database = {
           notes?: string | null
           source_package_id: string
           target_package_id: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1263,6 +1529,7 @@ export type Database = {
           notes?: string | null
           source_package_id?: string
           target_package_id?: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1280,6 +1547,13 @@ export type Database = {
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "package_delivery_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       package_profit_overrides: {
@@ -1289,6 +1563,7 @@ export type Database = {
           id: string
           notes: string | null
           package_id: string
+          tenant_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1297,6 +1572,7 @@ export type Database = {
           id?: string
           notes?: string | null
           package_id: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1305,6 +1581,7 @@ export type Database = {
           id?: string
           notes?: string | null
           package_id?: string
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1313,6 +1590,13 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: true
             referencedRelation: "data_packages_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_profit_overrides_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1328,6 +1612,7 @@ export type Database = {
           prefix_code: string | null
           provider_logo: string | null
           provider_name: string
+          tenant_id: string | null
           updated_at: string | null
           ussd_code_template: string | null
           ussd_prefix: string | null
@@ -1342,6 +1627,7 @@ export type Database = {
           prefix_code?: string | null
           provider_logo?: string | null
           provider_name: string
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_code_template?: string | null
           ussd_prefix?: string | null
@@ -1356,11 +1642,20 @@ export type Database = {
           prefix_code?: string | null
           provider_logo?: string | null
           provider_name?: string
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_code_template?: string | null
           ussd_prefix?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payment_providers_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_receipts: {
         Row: {
@@ -1376,6 +1671,7 @@ export type Database = {
           sender_phone: string
           sms_body: string | null
           status: string | null
+          tenant_id: string | null
           tx_id: string | null
         }
         Insert: {
@@ -1391,6 +1687,7 @@ export type Database = {
           sender_phone: string
           sms_body?: string | null
           status?: string | null
+          tenant_id?: string | null
           tx_id?: string | null
         }
         Update: {
@@ -1406,6 +1703,7 @@ export type Database = {
           sender_phone?: string
           sms_body?: string | null
           status?: string | null
+          tenant_id?: string | null
           tx_id?: string | null
         }
         Relationships: [
@@ -1414,6 +1712,13 @@ export type Database = {
             columns: ["matched_order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1431,6 +1736,7 @@ export type Database = {
           receiver_phone: string
           sender_phone: string | null
           status: string | null
+          tenant_id: string | null
           tier_id: string | null
           topup_amount: number | null
           ussd_code: string | null
@@ -1448,6 +1754,7 @@ export type Database = {
           receiver_phone: string
           sender_phone?: string | null
           status?: string | null
+          tenant_id?: string | null
           tier_id?: string | null
           topup_amount?: number | null
           ussd_code?: string | null
@@ -1465,6 +1772,7 @@ export type Database = {
           receiver_phone?: string
           sender_phone?: string | null
           status?: string | null
+          tenant_id?: string | null
           tier_id?: string | null
           topup_amount?: number | null
           ussd_code?: string | null
@@ -1486,6 +1794,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pending_online_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "pending_online_payments_tier_id_fkey"
             columns: ["tier_id"]
             isOneToOne: false
@@ -1504,6 +1819,7 @@ export type Database = {
           min_amount: number
           profit_rate: number
           provider_id: string
+          tenant_id: string | null
           tier_name: string
           updated_at: string
         }
@@ -1516,6 +1832,7 @@ export type Database = {
           min_amount: number
           profit_rate: number
           provider_id: string
+          tenant_id?: string | null
           tier_name?: string
           updated_at?: string
         }
@@ -1528,10 +1845,19 @@ export type Database = {
           min_amount?: number
           profit_rate?: number
           provider_id?: string
+          tenant_id?: string | null
           tier_name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "provider_wholesale_tiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       providers_config: {
         Row: {
@@ -1545,6 +1871,7 @@ export type Database = {
           promotional_text: string | null
           provider_logo: string | null
           provider_name: string
+          tenant_id: string | null
           updated_at: string | null
           ussd_flow_id: string | null
           ussd_method: Database["public"]["Enums"]["ussd_method"]
@@ -1561,6 +1888,7 @@ export type Database = {
           promotional_text?: string | null
           provider_logo?: string | null
           provider_name: string
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_flow_id?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"]
@@ -1577,12 +1905,20 @@ export type Database = {
           promotional_text?: string | null
           provider_logo?: string | null
           provider_name?: string
+          tenant_id?: string | null
           updated_at?: string | null
           ussd_flow_id?: string | null
           ussd_method?: Database["public"]["Enums"]["ussd_method"]
           ussd_single_template?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "providers_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "providers_config_ussd_flow_id_fkey"
             columns: ["ussd_flow_id"]
@@ -1603,6 +1939,7 @@ export type Database = {
           notes: string | null
           sim_id: string
           sim_slot: number | null
+          tenant_id: string | null
           updated_by: string | null
         }
         Insert: {
@@ -1615,6 +1952,7 @@ export type Database = {
           notes?: string | null
           sim_id: string
           sim_slot?: number | null
+          tenant_id?: string | null
           updated_by?: string | null
         }
         Update: {
@@ -1627,6 +1965,7 @@ export type Database = {
           notes?: string | null
           sim_id?: string
           sim_slot?: number | null
+          tenant_id?: string | null
           updated_by?: string | null
         }
         Relationships: [
@@ -1635,6 +1974,13 @@ export type Database = {
             columns: ["sim_id"]
             isOneToOne: false
             referencedRelation: "android_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sim_balances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1650,6 +1996,7 @@ export type Database = {
           processed_at: string | null
           provider: string | null
           status: string
+          tenant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1661,6 +2008,7 @@ export type Database = {
           processed_at?: string | null
           provider?: string | null
           status?: string
+          tenant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1672,6 +2020,127 @@ export type Database = {
           processed_at?: string | null
           provider?: string | null
           status?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_otp_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_admin_credentials: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          initial_password: string | null
+          tenant_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          initial_password?: string | null
+          tenant_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          initial_password?: string | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_admin_credentials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_members: {
+        Row: {
+          created_at: string
+          id: string
+          member_role: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_role?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_role?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          contact_phone: string | null
+          created_at: string
+          id: string
+          logo_url: string | null
+          name: string
+          notes: string | null
+          plan: string
+          primary_color: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          plan?: string
+          primary_color?: string | null
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          plan?: string
+          primary_color?: string | null
+          slug?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1705,6 +2174,7 @@ export type Database = {
           match_keywords: string[]
           response_template: string
           step_order: number
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1715,6 +2185,7 @@ export type Database = {
           match_keywords?: string[]
           response_template?: string
           step_order?: number
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1725,6 +2196,7 @@ export type Database = {
           match_keywords?: string[]
           response_template?: string
           step_order?: number
+          tenant_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1733,6 +2205,13 @@ export type Database = {
             columns: ["flow_id"]
             isOneToOne: false
             referencedRelation: "ussd_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ussd_flow_steps_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1745,6 +2224,7 @@ export type Database = {
           is_enabled: boolean
           notes: string | null
           provider_id: string | null
+          tenant_id: string | null
           trigger_code: string
           updated_at: string
         }
@@ -1755,6 +2235,7 @@ export type Database = {
           is_enabled?: boolean
           notes?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           trigger_code: string
           updated_at?: string
         }
@@ -1765,6 +2246,7 @@ export type Database = {
           is_enabled?: boolean
           notes?: string | null
           provider_id?: string | null
+          tenant_id?: string | null
           trigger_code?: string
           updated_at?: string
         }
@@ -1774,6 +2256,13 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ussd_flows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1790,6 +2279,7 @@ export type Database = {
           resolved: boolean
           step_order: number | null
           suggested_step_id: string | null
+          tenant_id: string | null
         }
         Insert: {
           auto_learned?: boolean
@@ -1802,6 +2292,7 @@ export type Database = {
           resolved?: boolean
           step_order?: number | null
           suggested_step_id?: string | null
+          tenant_id?: string | null
         }
         Update: {
           auto_learned?: boolean
@@ -1814,6 +2305,7 @@ export type Database = {
           resolved?: boolean
           step_order?: number | null
           suggested_step_id?: string | null
+          tenant_id?: string | null
         }
         Relationships: [
           {
@@ -1821,6 +2313,13 @@ export type Database = {
             columns: ["flow_id"]
             isOneToOne: false
             referencedRelation: "ussd_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ussd_unmatched_dialogs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1831,6 +2330,7 @@ export type Database = {
           id: string
           last_login_at: string
           phone_number: string
+          tenant_id: string | null
           updated_at: string
           verification_code: string | null
           verified_at: string
@@ -1840,6 +2340,7 @@ export type Database = {
           id?: string
           last_login_at?: string
           phone_number: string
+          tenant_id?: string | null
           updated_at?: string
           verification_code?: string | null
           verified_at?: string
@@ -1849,11 +2350,20 @@ export type Database = {
           id?: string
           last_login_at?: string
           phone_number?: string
+          tenant_id?: string | null
           updated_at?: string
           verification_code?: string | null
           verified_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "verified_phones_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -1867,6 +2377,7 @@ export type Database = {
         Args: { p_target_id: string }
         Returns: undefined
       }
+      can_manage_tenant: { Args: { _tenant_id: string }; Returns: boolean }
       claim_next_delivery: {
         Args: { p_device_id: string; p_providers: string[] }
         Returns: {
@@ -1887,6 +2398,7 @@ export type Database = {
           scheduled_at: string | null
           sim_slot: number | null
           status: string | null
+          tenant_id: string | null
           topup_amount: number | null
           ussd_code: string
         }[]
@@ -1896,6 +2408,18 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      clone_tenant_catalog: {
+        Args: { _source_slug?: string; _target_tenant: string }
+        Returns: Json
+      }
+      clone_tenant_providers: {
+        Args: {
+          _provider_names: string[]
+          _source_slug?: string
+          _target_tenant: string
+        }
+        Returns: Json
       }
       create_jumlo_payment_reservation: {
         Args: {
@@ -1922,6 +2446,7 @@ export type Database = {
         }
         Returns: Json
       }
+      current_tenant_id: { Args: never; Returns: string }
       force_delete_provider: { Args: { p_provider_id: string }; Returns: Json }
       generate_daily_outreach_targets: {
         Args: { p_admin_id?: string }
@@ -1929,74 +2454,151 @@ export type Database = {
           inserted_count: number
         }[]
       }
-      get_active_categories: {
-        Args: { provider_uuid?: string }
-        Returns: {
-          category_image: string | null
-          category_name: string
-          created_at: string
-          display_order: number
-          id: string
-          is_active: boolean | null
-          provider_id: string | null
-          updated_at: string
-          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "package_categories"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      get_active_payment_providers: {
-        Args: never
-        Returns: {
-          api_credentials: Json | null
-          commission_rate: number
-          created_at: string | null
-          id: string
-          is_active: boolean | null
-          payment_number: string | null
-          prefix_code: string | null
-          provider_logo: string | null
-          provider_name: string
-          updated_at: string | null
-          ussd_code_template: string | null
-          ussd_prefix: string | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "payment_providers_config"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      get_active_providers: {
-        Args: never
-        Returns: {
-          api_endpoint: string | null
-          api_key: string | null
-          created_at: string | null
-          display_order: number
-          evoucher_rate: number | null
-          id: string
-          is_active: boolean | null
-          promotional_text: string | null
-          provider_logo: string | null
-          provider_name: string
-          updated_at: string | null
-          ussd_flow_id: string | null
-          ussd_method: Database["public"]["Enums"]["ussd_method"]
-          ussd_single_template: string | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "providers_config"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+      get_active_categories:
+        | {
+            Args: { provider_uuid?: string }
+            Returns: {
+              category_image: string | null
+              category_name: string
+              created_at: string
+              display_order: number
+              id: string
+              is_active: boolean | null
+              provider_id: string | null
+              tenant_id: string | null
+              updated_at: string
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "package_categories"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string; provider_uuid?: string }
+            Returns: {
+              category_image: string | null
+              category_name: string
+              created_at: string
+              display_order: number
+              id: string
+              is_active: boolean | null
+              provider_id: string | null
+              tenant_id: string | null
+              updated_at: string
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "package_categories"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+      get_active_payment_providers:
+        | {
+            Args: never
+            Returns: {
+              api_credentials: Json | null
+              commission_rate: number
+              created_at: string | null
+              id: string
+              is_active: boolean | null
+              payment_number: string | null
+              prefix_code: string | null
+              provider_logo: string | null
+              provider_name: string
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code_template: string | null
+              ussd_prefix: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "payment_providers_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string }
+            Returns: {
+              api_credentials: Json | null
+              commission_rate: number
+              created_at: string | null
+              id: string
+              is_active: boolean | null
+              payment_number: string | null
+              prefix_code: string | null
+              provider_logo: string | null
+              provider_name: string
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code_template: string | null
+              ussd_prefix: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "payment_providers_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+      get_active_providers:
+        | {
+            Args: never
+            Returns: {
+              api_endpoint: string | null
+              api_key: string | null
+              created_at: string | null
+              display_order: number
+              evoucher_rate: number | null
+              id: string
+              is_active: boolean | null
+              promotional_text: string | null
+              provider_logo: string | null
+              provider_name: string
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_flow_id: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"]
+              ussd_single_template: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "providers_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string }
+            Returns: {
+              api_endpoint: string | null
+              api_key: string | null
+              created_at: string | null
+              display_order: number
+              evoucher_rate: number | null
+              id: string
+              is_active: boolean | null
+              promotional_text: string | null
+              provider_logo: string | null
+              provider_name: string
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_flow_id: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"]
+              ussd_single_template: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "providers_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       get_admin_analytics_summary: { Args: never; Returns: Json }
       get_admin_date_range_breakdown: {
         Args: {
@@ -2025,58 +2627,116 @@ export type Database = {
         Args: { p_period?: string; p_provider_id?: string }
         Returns: Json
       }
-      get_featured_packages: {
-        Args: never
-        Returns: {
-          category_id: string | null
-          connection_type_label: string | null
-          cost_price: number
-          created_at: string | null
-          data_amount: string
-          id: string
-          is_active: boolean | null
-          package_name: string
-          profit_margin: number
-          provider_id: string
-          selling_price: number
-          updated_at: string | null
-          ussd_code: string | null
-          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-          validity_days: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "data_packages_config"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      get_most_purchased_packages: {
-        Args: never
-        Returns: {
-          category_id: string | null
-          connection_type_label: string | null
-          cost_price: number
-          created_at: string | null
-          data_amount: string
-          id: string
-          is_active: boolean | null
-          package_name: string
-          profit_margin: number
-          provider_id: string
-          selling_price: number
-          updated_at: string | null
-          ussd_code: string | null
-          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-          validity_days: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "data_packages_config"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+      get_featured_packages:
+        | {
+            Args: never
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string }
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+      get_most_purchased_packages:
+        | {
+            Args: never
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string }
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       get_outreach_follow_ups: {
         Args: never
         Returns: {
@@ -2093,6 +2753,7 @@ export type Database = {
           notes: string | null
           phone_number: string
           status: string
+          tenant_id: string | null
           updated_at: string
         }[]
         SetofOptions: {
@@ -2102,52 +2763,116 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      get_provider_wholesale_tiers: {
-        Args: { provider_uuid: string }
+      get_provider_wholesale_tiers:
+        | {
+            Args: { provider_uuid: string }
+            Returns: {
+              created_at: string
+              display_order: number
+              id: string
+              is_active: boolean
+              max_amount: number
+              min_amount: number
+              profit_rate: number
+              provider_id: string
+              tenant_id: string | null
+              tier_name: string
+              updated_at: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "provider_wholesale_tiers"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string; provider_uuid: string }
+            Returns: {
+              created_at: string
+              display_order: number
+              id: string
+              is_active: boolean
+              max_amount: number
+              min_amount: number
+              profit_rate: number
+              provider_id: string
+              tenant_id: string | null
+              tier_name: string
+              updated_at: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "provider_wholesale_tiers"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+      get_public_packages:
+        | {
+            Args: { provider_uuid: string }
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { p_tenant_id?: string; provider_uuid: string }
+            Returns: {
+              category_id: string | null
+              connection_type_label: string | null
+              cost_price: number
+              created_at: string | null
+              data_amount: string
+              id: string
+              is_active: boolean | null
+              package_name: string
+              profit_margin: number
+              provider_id: string
+              selling_price: number
+              tenant_id: string | null
+              updated_at: string | null
+              ussd_code: string | null
+              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+              validity_days: string
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "data_packages_config"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+      get_tenant_by_slug: {
+        Args: { _slug: string }
         Returns: {
-          created_at: string
-          display_order: number
+          contact_phone: string
           id: string
-          is_active: boolean
-          max_amount: number
-          min_amount: number
-          profit_rate: number
-          provider_id: string
-          tier_name: string
-          updated_at: string
+          logo_url: string
+          name: string
+          primary_color: string
+          slug: string
         }[]
-        SetofOptions: {
-          from: "*"
-          to: "provider_wholesale_tiers"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      get_public_packages: {
-        Args: { provider_uuid: string }
-        Returns: {
-          category_id: string | null
-          connection_type_label: string | null
-          cost_price: number
-          created_at: string | null
-          data_amount: string
-          id: string
-          is_active: boolean | null
-          package_name: string
-          profit_margin: number
-          provider_id: string
-          selling_price: number
-          updated_at: string | null
-          ussd_code: string | null
-          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-          validity_days: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "data_packages_config"
-          isOneToOne: false
-          isSetofReturn: true
-        }
       }
       has_role: {
         Args: {
@@ -2156,17 +2881,20 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id?: string }; Returns: boolean }
+      is_tenant_member: { Args: { _tenant_id: string }; Returns: boolean }
       learn_ussd_keyword: {
         Args: { _kw: string; _step_id: string }
         Returns: undefined
       }
+      resolve_public_tenant: { Args: { p_tenant_id?: string }; Returns: string }
       resolve_unmatched_dialog: {
         Args: { _id: string; _step_id: string }
         Returns: undefined
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "super_admin" | "reseller"
       ussd_method: "single_step" | "interactive"
     }
     CompositeTypes: {
@@ -2295,7 +3023,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "super_admin", "reseller"],
       ussd_method: ["single_step", "interactive"],
     },
   },
