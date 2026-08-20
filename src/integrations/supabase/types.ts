@@ -555,6 +555,13 @@ export type Database = {
             foreignKeyName: "customer_discounts_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_discounts_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
@@ -702,6 +709,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "package_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_instructions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "customer_data_packages"
             referencedColumns: ["id"]
           },
           {
@@ -965,6 +979,13 @@ export type Database = {
             foreignKeyName: "discount_codes_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discount_codes_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
@@ -1060,6 +1081,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "featured_packages_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: true
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "featured_packages_package_id_fkey"
             columns: ["package_id"]
@@ -1313,6 +1341,13 @@ export type Database = {
             foreignKeyName: "orders_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
@@ -1537,7 +1572,21 @@ export type Database = {
             foreignKeyName: "package_delivery_rules_source_package_id_fkey"
             columns: ["source_package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_delivery_rules_source_package_id_fkey"
+            columns: ["source_package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_delivery_rules_target_package_id_fkey"
+            columns: ["target_package_id"]
+            isOneToOne: false
+            referencedRelation: "customer_data_packages"
             referencedColumns: ["id"]
           },
           {
@@ -1585,6 +1634,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "package_profit_overrides_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: true
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "package_profit_overrides_package_id_fkey"
             columns: ["package_id"]
@@ -1783,6 +1839,13 @@ export type Database = {
             foreignKeyName: "pending_online_payments_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_online_payments_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
@@ -1798,6 +1861,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_online_payments_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "customer_wholesale_tiers"
             referencedColumns: ["id"]
           },
           {
@@ -2376,6 +2446,79 @@ export type Database = {
       }
     }
     Views: {
+      customer_data_packages: {
+        Row: {
+          category_id: string | null
+          connection_type_label: string | null
+          created_at: string | null
+          data_amount: string | null
+          id: string | null
+          is_active: boolean | null
+          package_name: string | null
+          provider_id: string | null
+          selling_price: number | null
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_code: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days: string | null
+        }
+        Insert: {
+          category_id?: string | null
+          connection_type_label?: string | null
+          created_at?: string | null
+          data_amount?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          package_name?: string | null
+          provider_id?: string | null
+          selling_price?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+          ussd_code?: string | null
+          ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days?: string | null
+        }
+        Update: {
+          category_id?: string | null
+          connection_type_label?: string | null
+          created_at?: string | null
+          data_amount?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          package_name?: string | null
+          provider_id?: string | null
+          selling_price?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+          ussd_code?: string | null
+          ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_packages_config_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "package_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_packages_config_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_packages_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_delivery_instructions: {
         Row: {
           category_id: string | null
@@ -2428,6 +2571,13 @@ export type Database = {
             foreignKeyName: "delivery_instructions_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
+            referencedRelation: "customer_data_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_instructions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
             referencedRelation: "data_packages_config"
             referencedColumns: ["id"]
           },
@@ -2440,6 +2590,56 @@ export type Database = {
           },
           {
             foreignKeyName: "delivery_instructions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_wholesale_tiers: {
+        Row: {
+          created_at: string | null
+          display_order: number | null
+          id: string | null
+          is_active: boolean | null
+          max_amount: number | null
+          min_amount: number | null
+          profit_rate: number | null
+          provider_id: string | null
+          tenant_id: string | null
+          tier_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_order?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          max_amount?: number | null
+          min_amount?: number | null
+          profit_rate?: number | null
+          provider_id?: string | null
+          tenant_id?: string | null
+          tier_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_order?: number | null
+          id?: string | null
+          is_active?: boolean | null
+          max_amount?: number | null
+          min_amount?: number | null
+          profit_rate?: number | null
+          provider_id?: string | null
+          tenant_id?: string | null
+          tier_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_wholesale_tiers_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
