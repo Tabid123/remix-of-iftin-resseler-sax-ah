@@ -2376,7 +2376,77 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      customer_delivery_instructions: {
+        Row: {
+          category_id: string | null
+          code_template: string | null
+          created_at: string | null
+          id: string | null
+          instruction_template: string | null
+          notes: string | null
+          package_id: string | null
+          provider_id: string | null
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+        }
+        Insert: {
+          category_id?: string | null
+          code_template?: string | null
+          created_at?: string | null
+          id?: string | null
+          instruction_template?: string | null
+          notes?: string | null
+          package_id?: string | null
+          provider_id?: string | null
+          tenant_id?: string | null
+          updated_at?: string | null
+          ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
+        }
+        Update: {
+          category_id?: string | null
+          code_template?: string | null
+          created_at?: string | null
+          id?: string | null
+          instruction_template?: string | null
+          notes?: string | null
+          package_id?: string | null
+          provider_id?: string | null
+          tenant_id?: string | null
+          updated_at?: string | null
+          ussd_method?: Database["public"]["Enums"]["ussd_method"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_instructions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "package_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_instructions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "data_packages_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_instructions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_instructions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       admin_exists: { Args: never; Returns: boolean }
