@@ -20,6 +20,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ResellerRoute from "@/components/ResellerRoute";
 import Index from "./pages/Index";
 import ProviderSelection from "./pages/ProviderSelection";
+import Landing from "./pages/Landing";
 // Categories / Packages / Payment routes removed — app is now jumlo-only
 // OfflineMode page removed
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -94,6 +95,7 @@ const AppContent = () => {
       <StatusBarColor />
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/landing" element={<Landing />} />
         <Route path="/providers" element={<ProtectedRoute><ProviderSelection /></ProtectedRoute>} />
         {/* /offline-mode route removed */}
         {/* Removed: /categories, /packages, /payment — app is now jumlo-only */}
