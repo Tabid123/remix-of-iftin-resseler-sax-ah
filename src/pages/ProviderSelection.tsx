@@ -385,32 +385,33 @@ const ProviderSelection = () => {
             </button>
           </div>
 
-          <div className="mt-3 -mx-4 px-4 flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+          <div className="mt-3 flex flex-col gap-2.5">
             {filteredProviders.map((p) => {
               const colors = getProviderColor(p.provider_name);
               const isSelected = selectedProviderId === p.id;
               const offline = isReallyOnline === false;
+              const rate = providerRates[p.id];
               return (
                 <button
                   key={p.id}
                   onClick={() => handleProviderSelect(p)}
                   disabled={offline}
-                  className={`shrink-0 w-20 flex flex-col items-center gap-2 rounded-2xl p-2 transition-all ${
+                  className={`w-full flex items-center gap-3 rounded-2xl p-3 text-left transition-all ${
                     isSelected
-                      ? 'bg-blue-50 ring-2'
+                      ? 'bg-white ring-2'
                       : 'bg-white ring-1 ring-gray-200 hover:ring-gray-300'
                   } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
                   style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
                 >
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
+                    className="shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
                     style={{ backgroundColor: p.provider_logo ? '#fff' : colors.bg }}
                   >
                     {p.provider_logo ? (
                       <img
                         src={p.provider_logo}
                         alt={`${p.provider_name} logo`}
-                        className="w-full h-full object-contain rounded-xl"
+                        className="w-full h-full object-contain"
                         loading="eager"
                         decoding="async"
                         onError={(e) => {
@@ -427,9 +428,16 @@ const ProviderSelection = () => {
                       getInitials(p.provider_name)
                     )}
                   </div>
-                  <span className="text-xs font-medium text-gray-800 truncate w-full text-center">
-                    {p.provider_name}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name}</p>
+                    <p className="text-xs text-gray-500 truncate">Internet &amp; Jumlo</p>
+                  </div>
+                  {rate !== undefined && (
+                    <div className="shrink-0 text-right">
+                      <p className="text-lg font-extrabold text-green-600 leading-none">{rate}%</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Rate</p>
+                    </div>
+                  )}
                 </button>
               );
             })}
