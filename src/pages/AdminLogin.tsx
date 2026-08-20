@@ -91,6 +91,23 @@ const AdminLogin = () => {
         .maybeSingle();
 
       if (!roleData) {
+        // Tenant manager (reseller) → reseller dashboard
+        const { data: memberships } = await supabase
+          .from('tenant_members')
+          .select('member_role, role')
+          .eq('user_id', data.user.id);
+
+        const isTenantManager = (memberships ?? []).some((m: any) =>
+          ['owner', 'admin', 'manager'].includes(String(m.member_role ?? m.role ?? '').toLowerCase())
+        );
+
+        if (isTenantManager) {
+          toast({ title: 'Guul', description: 'Waad soo gashay' });
+          navigate('/reseller');
+          setLoading(false);
+          return;
+        }
+
         // First-admin bootstrap: if NO admin exists in the system yet,
         // grant admin role to this newly signed-in user.
         const { data: bootstrapResult } = await supabase.rpc('bootstrap_first_admin');

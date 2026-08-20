@@ -17,6 +17,7 @@ import { useAndroidBackButton } from "@/hooks/useAndroidBackButton";
 import { useAutoOnlineRedirect } from "@/hooks/useAutoOnlineRedirect";
 import { usePendingIntentSync } from "@/hooks/usePendingIntentSync";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ResellerRoute from "@/components/ResellerRoute";
 import Index from "./pages/Index";
 import ProviderSelection from "./pages/ProviderSelection";
 // Categories / Packages / Payment routes removed — app is now jumlo-only
@@ -103,7 +104,7 @@ const AppContent = () => {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/reseller" element={<React.Suspense fallback={null}><ResellerDashboard /></React.Suspense>} />
+        <Route path="/reseller" element={<ResellerRoute><React.Suspense fallback={null}><ResellerDashboard /></React.Suspense></ResellerRoute>} />
         <Route path="/download-app" element={<DownloadApp />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
