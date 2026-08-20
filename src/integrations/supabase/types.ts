@@ -2864,24 +2864,22 @@ export type Database = {
         Returns: {
           category_id: string | null
           connection_type_label: string | null
-          cost_price: number
           created_at: string | null
-          data_amount: string
-          id: string
+          data_amount: string | null
+          id: string | null
           is_active: boolean | null
-          package_name: string
-          profit_margin: number
-          provider_id: string
-          selling_price: number
+          package_name: string | null
+          provider_id: string | null
+          selling_price: number | null
           tenant_id: string | null
           updated_at: string | null
           ussd_code: string | null
           ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-          validity_days: string
+          validity_days: string | null
         }[]
         SetofOptions: {
           from: "*"
-          to: "data_packages_config"
+          to: "customer_data_packages"
           isOneToOne: false
           isSetofReturn: true
         }
