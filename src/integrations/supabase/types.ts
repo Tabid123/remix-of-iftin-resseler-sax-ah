@@ -2379,6 +2379,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      __rls_probe: { Args: { _uid: string }; Returns: Json }
       admin_exists: { Args: never; Returns: boolean }
       auto_recover_stuck_deliveries: { Args: never; Returns: Json }
       bootstrap_first_admin: { Args: never; Returns: Json }
