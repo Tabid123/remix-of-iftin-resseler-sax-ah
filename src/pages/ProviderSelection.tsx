@@ -18,6 +18,7 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { logScreenView } from '@/services/firebase';
 import { useConnectivity } from '@/contexts/ConnectivityContext';
+import { useTenant } from '@/contexts/TenantContext';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Provider {
@@ -38,6 +39,18 @@ const PROVIDER_COLORS: Record<string, { bg: string; ring: string }> = {
 
 const HEADER_BLUE = '#0066CC';
 const HEADER_BLUE_DARK = '#004fa3';
+
+// Darken a hex color by a ratio (0-1) for the header gradient
+const shadeHex = (hex: string, ratio = 0.25) => {
+  const m = /^#?([a-f\d]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map((v) => Math.max(0, Math.round(v * (1 - ratio))))
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('');
+  return `#${c}`;
+};
 
 const getProviderColor = (name: string) => {
   const key = name?.toLowerCase().trim();
@@ -218,6 +231,12 @@ const ProviderSelection = () => {
     [providers, selectedProviderId]
   );
 
+  // Tenant (reseller) branding — falls back to default app brand
+  const { tenant, logoUrl } = useTenant();
+  const brandName = tenant?.name || 'Iftin Internet';
+  const brandColor = tenant?.primary_color || HEADER_BLUE;
+  const brandColorDark = tenant?.primary_color ? shadeHex(tenant.primary_color, 0.3) : HEADER_BLUE_DARK;
+
   const handleProviderSelect = (p: Provider) => {
     if (isReallyOnline === false) {
       setShowOfflineToast(true);
@@ -234,14 +253,30 @@ const ProviderSelection = () => {
       <div
         className="fixed top-0 left-0 right-0 z-40"
         style={{
-          background: `linear-gradient(180deg, ${HEADER_BLUE} 0%, ${HEADER_BLUE_DARK} 100%)`,
+          background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColorDark} 100%)`,
           paddingTop: 'var(--effective-safe-area-top, 0px)',
         }}
       >
         <div className="px-4 pt-3 pb-4 text-white">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold tracking-tight">Iftin Internet</h1>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={`${brandName} logo`}
+                  className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                />
+              ) : (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 text-lg font-extrabold">
+                  {brandName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 leading-tight">
+                <h1 className="truncate text-lg font-extrabold tracking-tight">{brandName}</h1>
+                <p className="truncate text-[11px] font-medium text-white/70">Internet Marketplace</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2.5">
               <button
                 aria-label="Notifications"
                 onClick={() => navigate('/notifications')}
