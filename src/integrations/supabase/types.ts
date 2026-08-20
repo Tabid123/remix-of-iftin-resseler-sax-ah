@@ -2463,151 +2463,77 @@ export type Database = {
           inserted_count: number
         }[]
       }
-      get_active_categories:
-        | {
-            Args: { provider_uuid?: string }
-            Returns: {
-              category_image: string | null
-              category_name: string
-              created_at: string
-              display_order: number
-              id: string
-              is_active: boolean | null
-              provider_id: string | null
-              tenant_id: string | null
-              updated_at: string
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "package_categories"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string; provider_uuid?: string }
-            Returns: {
-              category_image: string | null
-              category_name: string
-              created_at: string
-              display_order: number
-              id: string
-              is_active: boolean | null
-              provider_id: string | null
-              tenant_id: string | null
-              updated_at: string
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "package_categories"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-      get_active_payment_providers:
-        | {
-            Args: never
-            Returns: {
-              api_credentials: Json | null
-              commission_rate: number
-              created_at: string | null
-              id: string
-              is_active: boolean | null
-              payment_number: string | null
-              prefix_code: string | null
-              provider_logo: string | null
-              provider_name: string
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code_template: string | null
-              ussd_prefix: string | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "payment_providers_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string }
-            Returns: {
-              api_credentials: Json | null
-              commission_rate: number
-              created_at: string | null
-              id: string
-              is_active: boolean | null
-              payment_number: string | null
-              prefix_code: string | null
-              provider_logo: string | null
-              provider_name: string
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code_template: string | null
-              ussd_prefix: string | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "payment_providers_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-      get_active_providers:
-        | {
-            Args: never
-            Returns: {
-              api_endpoint: string | null
-              api_key: string | null
-              created_at: string | null
-              display_order: number
-              evoucher_rate: number | null
-              id: string
-              is_active: boolean | null
-              promotional_text: string | null
-              provider_logo: string | null
-              provider_name: string
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_flow_id: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"]
-              ussd_single_template: string | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "providers_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string }
-            Returns: {
-              api_endpoint: string | null
-              api_key: string | null
-              created_at: string | null
-              display_order: number
-              evoucher_rate: number | null
-              id: string
-              is_active: boolean | null
-              promotional_text: string | null
-              provider_logo: string | null
-              provider_name: string
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_flow_id: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"]
-              ussd_single_template: string | null
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "providers_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
+      get_active_categories: {
+        Args: { p_tenant_id?: string; provider_uuid?: string }
+        Returns: {
+          category_image: string | null
+          category_name: string
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean | null
+          provider_id: string | null
+          tenant_id: string | null
+          updated_at: string
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "package_categories"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_active_payment_providers: {
+        Args: { p_tenant_id?: string }
+        Returns: {
+          api_credentials: Json | null
+          commission_rate: number
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          payment_number: string | null
+          prefix_code: string | null
+          provider_logo: string | null
+          provider_name: string
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_code_template: string | null
+          ussd_prefix: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "payment_providers_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_active_providers: {
+        Args: { p_tenant_id?: string }
+        Returns: {
+          api_endpoint: string | null
+          api_key: string | null
+          created_at: string | null
+          display_order: number
+          evoucher_rate: number | null
+          id: string
+          is_active: boolean | null
+          promotional_text: string | null
+          provider_logo: string | null
+          provider_name: string
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_flow_id: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"]
+          ussd_single_template: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "providers_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_admin_analytics_summary: { Args: never; Returns: Json }
       get_admin_date_range_breakdown: {
         Args: {
@@ -2636,116 +2562,60 @@ export type Database = {
         Args: { p_period?: string; p_provider_id?: string }
         Returns: Json
       }
-      get_featured_packages:
-        | {
-            Args: never
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string }
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-      get_most_purchased_packages:
-        | {
-            Args: never
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string }
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
+      get_featured_packages: {
+        Args: { p_tenant_id?: string }
+        Returns: {
+          category_id: string | null
+          connection_type_label: string | null
+          cost_price: number
+          created_at: string | null
+          data_amount: string
+          id: string
+          is_active: boolean | null
+          package_name: string
+          profit_margin: number
+          provider_id: string
+          selling_price: number
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_code: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "data_packages_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_most_purchased_packages: {
+        Args: { p_tenant_id?: string }
+        Returns: {
+          category_id: string | null
+          connection_type_label: string | null
+          cost_price: number
+          created_at: string | null
+          data_amount: string
+          id: string
+          is_active: boolean | null
+          package_name: string
+          profit_margin: number
+          provider_id: string
+          selling_price: number
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_code: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "data_packages_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_outreach_follow_ups: {
         Args: never
         Returns: {
@@ -2772,106 +2642,55 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      get_provider_wholesale_tiers:
-        | {
-            Args: { provider_uuid: string }
-            Returns: {
-              created_at: string
-              display_order: number
-              id: string
-              is_active: boolean
-              max_amount: number
-              min_amount: number
-              profit_rate: number
-              provider_id: string
-              tenant_id: string | null
-              tier_name: string
-              updated_at: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "provider_wholesale_tiers"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string; provider_uuid: string }
-            Returns: {
-              created_at: string
-              display_order: number
-              id: string
-              is_active: boolean
-              max_amount: number
-              min_amount: number
-              profit_rate: number
-              provider_id: string
-              tenant_id: string | null
-              tier_name: string
-              updated_at: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "provider_wholesale_tiers"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-      get_public_packages:
-        | {
-            Args: { provider_uuid: string }
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { p_tenant_id?: string; provider_uuid: string }
-            Returns: {
-              category_id: string | null
-              connection_type_label: string | null
-              cost_price: number
-              created_at: string | null
-              data_amount: string
-              id: string
-              is_active: boolean | null
-              package_name: string
-              profit_margin: number
-              provider_id: string
-              selling_price: number
-              tenant_id: string | null
-              updated_at: string | null
-              ussd_code: string | null
-              ussd_method: Database["public"]["Enums"]["ussd_method"] | null
-              validity_days: string
-            }[]
-            SetofOptions: {
-              from: "*"
-              to: "data_packages_config"
-              isOneToOne: false
-              isSetofReturn: true
-            }
-          }
+      get_provider_wholesale_tiers: {
+        Args: { p_tenant_id?: string; provider_uuid: string }
+        Returns: {
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          max_amount: number
+          min_amount: number
+          profit_rate: number
+          provider_id: string
+          tenant_id: string | null
+          tier_name: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "provider_wholesale_tiers"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_public_packages: {
+        Args: { p_tenant_id?: string; provider_uuid: string }
+        Returns: {
+          category_id: string | null
+          connection_type_label: string | null
+          cost_price: number
+          created_at: string | null
+          data_amount: string
+          id: string
+          is_active: boolean | null
+          package_name: string
+          profit_margin: number
+          provider_id: string
+          selling_price: number
+          tenant_id: string | null
+          updated_at: string | null
+          ussd_code: string | null
+          ussd_method: Database["public"]["Enums"]["ussd_method"] | null
+          validity_days: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "data_packages_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_tenant_by_slug: {
         Args: { _slug: string }
         Returns: {
