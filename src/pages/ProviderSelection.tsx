@@ -468,30 +468,32 @@ const ProviderSelection = () => {
                   } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
                   style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
                 >
-                  <div
-                    className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
-                    style={{ backgroundColor: colors.bg }}
-                  >
-                    {p.provider_logo ? (
-                      <img
-                        src={p.provider_logo}
-                        alt={`${p.provider_name} logo`}
-                        className="w-full h-full object-contain"
-                        loading="eager"
-                        decoding="async"
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          el.style.display = 'none';
-                          const parent = el.parentElement;
-                          if (parent) {
-                            parent.style.backgroundColor = colors.bg;
-                            parent.textContent = getInitials(p.provider_name);
-                          }
-                        }}
-                      />
-                    ) : (
-                      getInitials(p.provider_name)
-                    )}
+                  <div className="relative shrink-0 w-12 h-12">
+                    <div
+                      className="w-full h-full rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
+                      style={{ backgroundColor: colors.bg }}
+                    >
+                      {p.provider_logo ? (
+                        <img
+                          src={p.provider_logo}
+                          alt={`${p.provider_name} logo`}
+                          className="w-full h-full object-contain"
+                          loading="eager"
+                          decoding="async"
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            el.style.display = 'none';
+                            const parent = el.parentElement;
+                            if (parent) {
+                              parent.style.backgroundColor = colors.bg;
+                              parent.textContent = getInitials(p.provider_name);
+                            }
+                          }}
+                        />
+                      ) : (
+                        getInitials(p.provider_name)
+                      )}
+                    </div>
                     <span className="absolute -bottom-0.5 -right-0.5 bg-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm" style={{ color: colors.bg }}>
                       T1
                     </span>
