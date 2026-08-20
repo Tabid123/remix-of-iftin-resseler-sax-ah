@@ -371,6 +371,13 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const { tenant, logoUrl, needsOnboarding, loading: tenantLoading } = useTenant();
+  const [showTenantSetup, setShowTenantSetup] = useState(false);
+
+  // Show the workspace setup form the first time a tenant is not branded yet
+  useEffect(() => {
+    if (!tenantLoading && needsOnboarding) setShowTenantSetup(true);
+  }, [tenantLoading, needsOnboarding]);
 
   // Core shared data (loaded on mount - lightweight)
   const [providers, setProviders] = useState<Provider[]>([]);
