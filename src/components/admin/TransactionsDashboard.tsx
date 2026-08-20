@@ -302,7 +302,7 @@ export function TransactionsDashboard() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="mobile-table">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-blue-600 to-purple-600">
                   <TableHead className="text-white font-semibold">TranId</TableHead>
@@ -331,37 +331,37 @@ export function TransactionsDashboard() {
 
                     return (
                       <TableRow key={t.id} className={index % 2 === 0 ? 'bg-muted/30' : ''}>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell data-label="TranId" className="font-mono text-sm">
                           {t.id.substring(0, 8).toUpperCase()}
                         </TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">
+                        <TableCell data-label="Time" className="text-sm whitespace-nowrap">
                           {format(new Date(t.created_at), 'MMM dd, HH:mm')}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Description">
                           <div className="max-w-48">
                             <p className="font-medium truncate">{t.package_name}</p>
                             <p className="text-xs text-muted-foreground">{t.data_amount}</p>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell data-label="Selling" className="text-right font-medium">
                           ${Number(t.selling_price).toFixed(2)}
                         </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
+                        <TableCell data-label="Cost" className="text-right text-muted-foreground">
                           ${Number(t.cost_price || 0).toFixed(2)}
                         </TableCell>
-                        <TableCell className={`text-right font-semibold ${isPositiveProfit ? 'text-green-600' : 'text-red-600'}`}>
+                        <TableCell data-label="Profit" className={`text-right font-semibold ${isPositiveProfit ? 'text-green-600' : 'text-red-600'}`}>
                           {isPositiveProfit ? '+' : ''}${formatPrice(profit)}
                         </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell data-label="Provider" className="font-medium">
                           {t.provider_name}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell data-label="Sender" className="font-mono text-sm">
                           {(t.sender_phone || t.customer_phone || '').replace('+252', '')}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell data-label="Receiver" className="font-mono text-sm">
                           {t.receiver_phone?.replace('+252', '') || '-'}
                         </TableCell>
-                        <TableCell className="text-center flex items-center gap-2 justify-center">
+                        <TableCell data-label="Status" className="text-center flex items-center gap-2 justify-center">
                           {getStatusBadge(t.delivery_status || t.status)}
                           {t.delivery_status === 'timeout' && (
                             <Button

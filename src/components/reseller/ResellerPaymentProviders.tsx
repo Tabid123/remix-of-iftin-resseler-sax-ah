@@ -103,27 +103,27 @@ export default function ResellerPaymentProviders() {
         <CardHeader><CardTitle>Payment Providers</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-            <Table>
+            <Table className="mobile-table">
               <TableHeader><TableRow><TableHead>Magaca</TableHead><TableHead>Prefix</TableHead><TableHead>Number</TableHead><TableHead>USSD</TableHead><TableHead>Commission</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {items.map((pp) => {
                   const isEditing = editing?.id === pp.id;
                   return (
                     <TableRow key={pp.id}>
-                      <TableCell className="font-medium">{pp.provider_name}</TableCell>
-                      <TableCell className="font-mono">
+                      <TableCell data-label="Magaca" className="font-medium">{pp.provider_name}</TableCell>
+                      <TableCell data-label="Prefix" className="font-mono">
                         {isEditing ? <Input className="w-20" value={editing.prefix_code ?? ''} onChange={(e) => setEditing({ ...editing, prefix_code: e.target.value })} /> : (pp.prefix_code || '-')}
                       </TableCell>
-                      <TableCell className="font-mono">
+                      <TableCell data-label="Number" className="font-mono">
                         {isEditing ? <Input className="w-36" value={editing.payment_number ?? ''} onChange={(e) => setEditing({ ...editing, payment_number: e.target.value })} /> : (pp.payment_number || '-')}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell data-label="USSD" className="font-mono text-xs">
                         {isEditing ? <Input className="w-44" value={editing.ussd_code_template ?? ''} onChange={(e) => setEditing({ ...editing, ussd_code_template: e.target.value })} /> : (pp.ussd_code_template || '-')}
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Commission">
                         {isEditing ? <Input className="w-20" type="number" step="0.01" value={editing.commission_rate} onChange={(e) => setEditing({ ...editing, commission_rate: parseFloat(e.target.value) || 0 })} /> : `${pp.commission_rate}%`}
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Falal">
                         <div className="flex gap-1">
                           {isEditing ? (
                             <Button size="sm" onClick={saveEdit}><Save className="h-4 w-4" /></Button>

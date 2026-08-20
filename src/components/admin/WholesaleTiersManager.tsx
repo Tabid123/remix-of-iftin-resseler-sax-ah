@@ -206,13 +206,13 @@ export default function WholesaleTiersManager() {
           </Dialog>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-auto">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">Loading...</div>
         ) : filteredTiers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">Wax tier ah ma jiraan. Riix "Tier Cusub" si aad u abuurto.</div>
         ) : (
-          <Table>
+          <Table className="mobile-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Shirkad</TableHead>
@@ -228,16 +228,16 @@ export default function WholesaleTiersManager() {
             <TableBody>
               {filteredTiers.map(t => (
                 <TableRow key={t.id}>
-                  <TableCell>{providerName(t.provider_id)}</TableCell>
-                  <TableCell>{t.tier_name}</TableCell>
-                  <TableCell>${Number(t.min_amount).toFixed(2)}</TableCell>
-                  <TableCell>${Number(t.max_amount).toFixed(2)}</TableCell>
-                  <TableCell>{Number(t.profit_rate).toFixed(2)}%</TableCell>
-                  <TableCell>{t.display_order}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Shirkad">{providerName(t.provider_id)}</TableCell>
+                  <TableCell data-label="Tier">{t.tier_name}</TableCell>
+                  <TableCell data-label="Min">${Number(t.min_amount).toFixed(2)}</TableCell>
+                  <TableCell data-label="Max">${Number(t.max_amount).toFixed(2)}</TableCell>
+                  <TableCell data-label="Rate %">{Number(t.profit_rate).toFixed(2)}%</TableCell>
+                  <TableCell data-label="Order">{t.display_order}</TableCell>
+                  <TableCell data-label="Active">
                     <Switch checked={t.is_active} onCheckedChange={() => toggleActive(t)} />
                   </TableCell>
-                  <TableCell className="text-right space-x-1">
+                  <TableCell data-label="Falal" className="text-right space-x-1">
                     <Button size="sm" variant="outline" onClick={() => openEdit(t)}>
                       <Pencil className="w-3 h-3" />
                     </Button>

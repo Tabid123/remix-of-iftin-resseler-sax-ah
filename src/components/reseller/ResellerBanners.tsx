@@ -86,20 +86,20 @@ export default function ResellerBanners() {
         <CardHeader><CardTitle>Banners</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-            <Table>
+            <Table className="mobile-table">
               <TableHeader><TableRow><TableHead>Preview</TableHead><TableHead>Type</TableHead><TableHead>Order</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {banners.map((b) => (
                   <TableRow key={b.id}>
-                    <TableCell>
+                    <TableCell data-label="Preview">
                       {b.media_type === 'video'
                         ? <video src={b.banner_image} className="h-16 rounded" />
                         : <img src={b.banner_image} alt={b.alt_text || 'Banner'} className="h-16 rounded object-cover" />}
                     </TableCell>
-                    <TableCell><Badge variant="outline">{b.media_type || 'image'}</Badge></TableCell>
-                    <TableCell>{b.display_order}</TableCell>
-                    <TableCell>{b.is_active ? <span className="text-emerald-600">Active</span> : <span className="text-destructive">Inactive</span>}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Type"><Badge variant="outline">{b.media_type || 'image'}</Badge></TableCell>
+                    <TableCell data-label="Order">{b.display_order}</TableCell>
+                    <TableCell data-label="Status">{b.is_active ? <span className="text-emerald-600">Active</span> : <span className="text-destructive">Inactive</span>}</TableCell>
+                    <TableCell data-label="Falal">
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => toggle(b)}><Power className="h-4 w-4" /></Button>
                         <Button variant="destructive" size="sm" onClick={() => remove(b.id)}><Trash2 className="h-4 w-4" /></Button>
