@@ -1,0 +1,1 @@
+grant execute on function public.__rls_probe(uuid) to postgres, service_role;
