@@ -71,7 +71,8 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { full_name },
+        // skip_auto_tenant prevents the signup trigger from creating a personal workspace
+        user_metadata: { full_name, skip_auto_tenant: 'true' },
       });
 
       if (createError) throw createError;

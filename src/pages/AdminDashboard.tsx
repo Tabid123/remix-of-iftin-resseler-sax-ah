@@ -23,6 +23,8 @@ import { AdminAIChat } from '@/components/admin/AdminAIChat';
 
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import { TenantSetupDialog } from '@/components/tenant/TenantSetupDialog';
+import { useTenant } from '@/contexts/TenantContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -369,6 +371,13 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const { tenant, logoUrl, needsOnboarding, loading: tenantLoading } = useTenant();
+  const [showTenantSetup, setShowTenantSetup] = useState(false);
+
+  // Show the workspace setup form the first time a tenant is not branded yet
+  useEffect(() => {
+    if (!tenantLoading && needsOnboarding) setShowTenantSetup(true);
+  }, [tenantLoading, needsOnboarding]);
 
   // Core shared data (loaded on mount - lightweight)
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -1068,14 +1077,21 @@ const AdminDashboard = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-primary/5 via-background to-secondary/5">
         <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        
+        <TenantSetupDialog open={showTenantSetup} onOpenChange={setShowTenantSetup} />
+
         <div className="flex-1 flex flex-col">
           <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center px-4 gap-4">
             <SidebarTrigger />
             <div className="flex-1 flex justify-between items-center">
-              <div><h1 className="text-lg md:text-2xl font-bold">Admin Dashboard</h1></div>
+              <div className="flex items-center gap-2 min-w-0">
+                {logoUrl && <img src={logoUrl} alt={`${tenant?.name ?? 'Workspace'} logo`} className="h-8 w-8 rounded object-cover" />}
+                <h1 className="text-lg md:text-2xl font-bold truncate">{tenant?.name ?? 'Admin Dashboard'}</h1>
+              </div>
               <div className="flex items-center gap-2">
                 <LiveClock language={language} />
+                <Button onClick={() => setShowTenantSetup(true)} variant="outline" size="sm">
+                  {language === 'so' ? 'Workspace' : 'Workspace'}
+                </Button>
                 <LanguageSelector />
                 <ThemeToggle />
                 <Button onClick={handleLogout} variant="outline" size="sm"><LogOut className="h-4 w-4 mr-2" />{language === 'so' ? 'Ka bax' : 'Logout'}</Button>

@@ -36,6 +36,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { TenantSwitcher } from "@/components/tenant/TenantSwitcher";
 
 interface NavItem {
   title: string;
@@ -136,6 +137,9 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
       collapsible={isMobile ? "offcanvas" : "icon"}
     >
       <SidebarContent>
+        <div className="px-2 pt-2">
+          <TenantSwitcher collapsed={collapsed && !isMobile} />
+        </div>
         <SidebarGroup>
           <SidebarGroupLabel className={collapsed ? "text-center" : ""}>
             {!collapsed && (language === 'so' ? 'Maamul' : 'Admin Menu')}

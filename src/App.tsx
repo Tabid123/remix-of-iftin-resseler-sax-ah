@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { StatusBarColor } from "@/components/StatusBarColor";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
 import { useOfflineCache } from "@/hooks/useOfflineCache";
@@ -200,13 +201,15 @@ const App = () => {
       <ConnectivityProvider>
         <ThemeProvider>
           <LanguageProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <AppContent />
-              </BrowserRouter>
-            </TooltipProvider>
+            <TenantProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <AppContent />
+                </BrowserRouter>
+              </TooltipProvider>
+            </TenantProvider>
           </LanguageProvider>
         </ThemeProvider>
       </ConnectivityProvider>
