@@ -78,7 +78,7 @@ export const useOfflineCache = () => {
 
       // Cache delivery instructions
       const { data: deliveryInstructions } = await supabase
-        .from('delivery_instructions')
+        .from('customer_delivery_instructions')
         .select('*');
       if (deliveryInstructions) {
         localStorage.setItem(CACHE_KEYS.deliveryInstructions, JSON.stringify(deliveryInstructions));
