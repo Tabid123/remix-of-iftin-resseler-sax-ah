@@ -44,6 +44,7 @@ const OfflinePaymentSettings = lazy(() => import('@/components/admin/OfflinePaym
 const AppSettings = lazy(() => import('@/components/admin/AppSettings'));
 const UssdFlowsManager = lazy(() => import('@/components/admin/UssdFlowsManager'));
 const UssdLearningDashboard = lazy(() => import('@/components/admin/UssdLearningDashboard'));
+const SuperAdminTenants = lazy(() => import('@/components/admin/SuperAdminTenants'));
 const BalanceManagement = lazy(() => import('@/components/admin/BalanceManagement').then(m => ({ default: m.BalanceManagement })));
 const PackageDeliveryRules = lazy(() => import('@/components/admin/PackageDeliveryRules').then(m => ({ default: m.PackageDeliveryRules })));
 const DailyOrdersManager = lazy(() => import('@/components/admin/DailyOrdersManager').then(m => ({ default: m.DailyOrdersManager })));
@@ -1150,6 +1151,7 @@ const AdminDashboard = () => {
                 {activeTab === 'settings' && <TabsContent value="settings"><Suspense fallback={<TabLoader />}><AppSettings /></Suspense></TabsContent>}
                 {activeTab === 'ussd-flows' && <TabsContent value="ussd-flows"><Suspense fallback={<TabLoader />}><UssdFlowsManager /></Suspense></TabsContent>}
                 {activeTab === 'ussd-learning' && <TabsContent value="ussd-learning"><Suspense fallback={<TabLoader />}><UssdLearningDashboard /></Suspense></TabsContent>}
+                {activeTab === 'super-admin' && <TabsContent value="super-admin"><Suspense fallback={<TabLoader />}><SuperAdminTenants /></Suspense></TabsContent>}
                 {activeTab === 'wholesale-tiers' && <TabsContent value="wholesale-tiers"><Suspense fallback={<TabLoader />}><WholesaleTiersManager /></Suspense></TabsContent>}
 
                 {/* Self-contained data tabs */}

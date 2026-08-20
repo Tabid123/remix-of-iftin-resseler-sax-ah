@@ -85,6 +85,7 @@ const navItems: NavItem[] = [
   { title: "USSD Flows", titleSo: "📞 USSD Flows", value: "ussd-flows", icon: PhoneCall, permission: "manage_settings" },
   { title: "USSD Learning", titleSo: "🧠 USSD Learning", value: "ussd-learning", icon: PhoneCall, permission: "manage_settings" },
   { title: "Settings", titleSo: "⚙️ Settings", value: "settings", icon: Settings, permission: "manage_settings" },
+  { title: "Tenants (SaaS)", titleSo: "🏢 Tenants (SaaS)", value: "super-admin", icon: Building2, permission: "__super_admin__" },
 ];
 
 interface AdminSidebarProps {
@@ -98,6 +99,7 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
   const isMobile = useIsMobile();
   const collapsed = state === "collapsed";
   const [userPermissions, setUserPermissions] = useState<string[] | null>(null); // null = loading, [] = full access
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const loadPermissions = async () => {
@@ -110,6 +112,9 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
         .eq('user_id', user.id);
 
       setUserPermissions(perms?.map(p => p.permission_key) || []);
+
+      const { data: superAdmin } = await supabase.rpc('is_super_admin', { _user_id: user.id });
+      setIsSuperAdmin(!!superAdmin);
     };
     loadPermissions();
   }, []);
@@ -125,6 +130,7 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
   const hasFullAccess = userPermissions !== null && userPermissions.length === 0;
 
   const visibleItems = navItems.filter(item => {
+    if (item.permission === '__super_admin__') return isSuperAdmin;
     if (!item.permission) return true; // dashboard always visible
     if (hasFullAccess) return true; // full access sees everything
     if (userPermissions === null) return false; // still loading
