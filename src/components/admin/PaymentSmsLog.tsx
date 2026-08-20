@@ -496,7 +496,7 @@ export function PaymentSmsLog() {
           </div>
         ) : (
           <div className="rounded-md border overflow-x-auto">
-            <Table>
+            <Table className="mobile-table">
               <TableHeader>
                 <TableRow>
                   <TableHead className="whitespace-nowrap">{language === 'so' ? 'Waqti' : 'Time'}</TableHead>
@@ -516,7 +516,7 @@ export function PaymentSmsLog() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => handleRowClick(receipt)}
                   >
-                    <TableCell className="whitespace-nowrap text-sm">
+                    <TableCell data-label={language === 'so' ? 'Waqti' : 'Time'} className="whitespace-nowrap text-sm">
                       {receipt.created_at 
                         ? format(new Date(receipt.created_at), 'HH:mm')
                         : '-'}
@@ -526,9 +526,9 @@ export function PaymentSmsLog() {
                           : ''}
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{receipt.sender_phone}</TableCell>
-                    <TableCell className="font-semibold">${receipt.amount.toFixed(2)}</TableCell>
-                    <TableCell>
+                    <TableCell data-label={language === 'so' ? 'Soo Diray' : 'From'} className="font-mono text-sm">{receipt.sender_phone}</TableCell>
+                    <TableCell data-label={language === 'so' ? 'Lacag' : 'Amount'} className="font-semibold">${receipt.amount.toFixed(2)}</TableCell>
+                    <TableCell data-label={language === 'so' ? 'Shirkad' : 'Provider'}>
                       {receipt.order?.provider ? (
                         <div className="flex items-center gap-2">
                           {receipt.order.provider.provider_logo && (
@@ -544,13 +544,13 @@ export function PaymentSmsLog() {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[120px] truncate text-sm">
+                    <TableCell data-label={language === 'so' ? 'Xirmo' : 'Package'} className="max-w-[120px] truncate text-sm">
                       {receipt.order?.package_name || '-'}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell data-label="Data" className="text-sm">
                       {receipt.order?.data_amount || '-'}
                     </TableCell>
-                    <TableCell className="max-w-[150px]">
+                    <TableCell data-label="SMS Body" className="max-w-[150px]">
                       {receipt.sms_body ? (
                         <span className="text-xs text-muted-foreground truncate block" title={receipt.sms_body}>
                           {receipt.sms_body.slice(0, 40)}...
@@ -559,7 +559,7 @@ export function PaymentSmsLog() {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell>{getStatusBadge(receipt.status)}</TableCell>
+                    <TableCell data-label="Status">{getStatusBadge(receipt.status)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
