@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, History, Wallet, User } from 'lucide-react';
+import { Home, History, Wallet } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 
@@ -25,7 +25,7 @@ export function BottomNavigation({ onNotificationsClick }: BottomNavigationProps
     else navigate('/notifications');
   };
 
-  // 4 tabs per spec: Hoyga, Dalabyada, Lacagta, Xisaabta
+  // 3 tabs: Hoyga, Dalabyada, Lacagta
   const tabs = [
     {
       key: 'home',
@@ -48,13 +48,6 @@ export function BottomNavigation({ onNotificationsClick }: BottomNavigationProps
       active: isActive('/notifications'),
       badge: unreadCount,
       onClick: handleNotificationsClick,
-    },
-    {
-      key: 'profile',
-      label: 'Xisaabta',
-      icon: User,
-      active: isActive('/profile'),
-      onClick: () => navigate('/profile'),
     },
   ];
 

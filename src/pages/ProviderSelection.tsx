@@ -293,17 +293,6 @@ const ProviderSelection = () => {
               </button>
             </div>
           </div>
-
-          {/* Search bar */}
-          <div className="mt-3 bg-white rounded-full flex items-center px-4 py-2 shadow-sm">
-            <Search className="w-4 h-4 text-gray-400 mr-2" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Raadi xirmo..."
-              className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 outline-none"
-            />
-          </div>
         </div>
       </div>
 
@@ -312,7 +301,7 @@ const ProviderSelection = () => {
         ref={contentRef}
         className="flex-1 overflow-y-auto"
         style={{
-          paddingTop: 'calc(7.75rem + var(--effective-safe-area-top, 0px))',
+          paddingTop: 'calc(5.25rem + var(--effective-safe-area-top, 0px))',
           paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
         }}
         onTouchStart={handleTouchStart}
