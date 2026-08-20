@@ -39,14 +39,13 @@ const Index = () => {
 
   // Skip splash if already initialized
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
     if (wasAlreadyInitialized) {
       navigate('/providers', { replace: true });
       return;
     }
     // First open: short splash then go to providers (no verification)
     const t = setTimeout(() => {
+      hasInitialized.current = true;
       sessionStorage.setItem('appInitialized', 'true');
       setIsChecking(false);
       navigate('/providers', { replace: true });
