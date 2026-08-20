@@ -12,7 +12,7 @@ export function BottomNavigation({ onNotificationsClick }: BottomNavigationProps
   const navigate = useNavigate();
   const location = useLocation();
   const { unreadCount, markAsSeen } = useNotifications();
-  const { primaryDeep } = useBrand();
+  const { primary } = useBrand();
 
   // Prevent navigation jumping on mobile viewport resize
   useVisualViewport();
@@ -61,7 +61,7 @@ export function BottomNavigation({ onNotificationsClick }: BottomNavigationProps
     <div
       className="fixed bottom-0 left-0 right-0 z-50 transform-gpu"
       style={{
-        backgroundColor: primaryDeep,
+        backgroundColor: primary,
         paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
         contain: 'layout',
       }}
