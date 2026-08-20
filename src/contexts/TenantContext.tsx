@@ -28,6 +28,25 @@ interface TenantContextValue {
 }
 
 const STORAGE_KEY = 'active_tenant_id';
+const PUBLIC_SLUG_KEY = 'public_tenant_slug';
+
+// Resolve the storefront tenant slug for anonymous visitors:
+// ?t=slug  →  saved slug  →  subdomain (slug.example.com)
+const resolvePublicSlug = (): string | null => {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('t');
+    if (fromUrl) {
+      localStorage.setItem(PUBLIC_SLUG_KEY, fromUrl);
+      return fromUrl;
+    }
+    const saved = localStorage.getItem(PUBLIC_SLUG_KEY);
+    if (saved) return saved;
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    if (parts.length > 2 && !['www', 'id-preview', 'localhost'].includes(parts[0])) return parts[0];
+  } catch { /* ignore */ }
+  return null;
+};
 
 const TenantContext = createContext<TenantContextValue>({
   loading: true,
@@ -51,6 +70,26 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     () => { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } }
   );
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [publicTenant, setPublicTenant] = useState<TenantMembership | null>(null);
+
+  // Anonymous storefront branding (logo + primary color) via public RPC
+  const loadPublicTenant = useCallback(async () => {
+    const slug = resolvePublicSlug();
+    if (!slug) { setPublicTenant(null); return; }
+    const { data, error } = await supabase.rpc('get_tenant_by_slug', { _slug: slug });
+    if (error || !data || !(data as any[]).length) { setPublicTenant(null); return; }
+    const t: any = (data as any[])[0];
+    setPublicTenant({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      logo_url: t.logo_url ?? null,
+      primary_color: t.primary_color ?? null,
+      secondary_color: null,
+      plan: null,
+      role: 'visitor',
+    });
+  }, []);
 
   const loadTenants = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -82,15 +121,16 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     loadTenants();
+    loadPublicTenant();
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       setTimeout(() => { loadTenants(); }, 0);
     });
     return () => sub.subscription.unsubscribe();
-  }, [loadTenants]);
+  }, [loadTenants, loadPublicTenant]);
 
   const tenant = useMemo(
-    () => tenants.find((t) => t.id === currentTenantId) ?? null,
-    [tenants, currentTenantId]
+    () => tenants.find((t) => t.id === currentTenantId) ?? tenants[0] ?? publicTenant,
+    [tenants, currentTenantId, publicTenant]
   );
 
   // Persist selection
