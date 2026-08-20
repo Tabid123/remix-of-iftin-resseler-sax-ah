@@ -85,6 +85,7 @@ const navItems: NavItem[] = [
   { title: "Fraud Alerts", titleSo: "🚨 Fraud Alerts", value: "fraud-alerts", icon: AlertTriangle, permission: "view_audit_log" },
   { title: "USSD Flows", titleSo: "📞 USSD Flows", value: "ussd-flows", icon: PhoneCall, permission: "manage_settings" },
   { title: "USSD Learning", titleSo: "🧠 USSD Learning", value: "ussd-learning", icon: PhoneCall, permission: "manage_settings" },
+  { title: "Contact Messages", titleSo: "📨 Nala Soo Xiriir", value: "contact-messages", icon: MessageSquare, permission: "manage_settings" },
   { title: "Settings", titleSo: "⚙️ Settings", value: "settings", icon: Settings, permission: "manage_settings" },
   { title: "Tenants (SaaS)", titleSo: "🏢 Tenants (SaaS)", value: "super-admin", icon: Building2, permission: "__super_admin__" },
 ];
