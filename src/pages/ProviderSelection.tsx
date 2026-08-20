@@ -231,6 +231,12 @@ const ProviderSelection = () => {
     [providers, selectedProviderId]
   );
 
+  // Tenant (reseller) branding — falls back to default app brand
+  const { tenant, logoUrl } = useTenant();
+  const brandName = tenant?.name || 'Iftin Internet';
+  const brandColor = tenant?.primary_color || HEADER_BLUE;
+  const brandColorDark = tenant?.primary_color ? shadeHex(tenant.primary_color, 0.3) : HEADER_BLUE_DARK;
+
   const handleProviderSelect = (p: Provider) => {
     if (isReallyOnline === false) {
       setShowOfflineToast(true);
