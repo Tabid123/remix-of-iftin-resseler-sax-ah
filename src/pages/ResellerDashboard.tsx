@@ -7,6 +7,7 @@ import { Loader2, PanelLeft, RefreshCw, Volume2, AlertTriangle, Home, ChevronRig
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { ResellerSidebar, RESELLER_GROUPS } from '@/components/reseller/ResellerSidebar';
+import ResellerSimPins from '@/components/reseller/ResellerSimPins';
 import { ResellerStatCards } from '@/components/reseller/ResellerStatCards';
 
 const TransactionsDashboard = lazy(() => import('@/components/admin/TransactionsDashboard').then(m => ({ default: m.TransactionsDashboard })));
