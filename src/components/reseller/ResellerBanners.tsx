@@ -70,7 +70,7 @@ export default function ResellerBanners() {
       <Card>
         <CardHeader><CardTitle>Ku dar Banner Cusub</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div><Label>Banner URL</Label><Input value={form.banner_image} onChange={(e) => setForm({ ...form, banner_image: e.target.value })} /></div>
             <div><Label>Alt Text</Label><Input value={form.alt_text} onChange={(e) => setForm({ ...form, alt_text: e.target.value })} /></div>
             <div><Label>Display Order</Label><Input type="number" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: parseInt(e.target.value) || 1 })} /></div>

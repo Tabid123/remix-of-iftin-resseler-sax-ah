@@ -85,7 +85,7 @@ export default function ResellerPaymentProviders() {
       <Card>
         <CardHeader><CardTitle>Ku dar Payment Provider</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div><Label>Magaca</Label><Input value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} /></div>
             <div><Label>Logo URL</Label><Input value={form.provider_logo} onChange={(e) => setForm({ ...form, provider_logo: e.target.value })} /></div>
             <div><Label>Commission %</Label><Input type="number" step="0.01" value={form.commission_rate} onChange={(e) => setForm({ ...form, commission_rate: parseFloat(e.target.value) || 0 })} /></div>
