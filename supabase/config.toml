@@ -1,6 +1,3 @@
 project_id = "zshzcuomdegeijqznvvu"
 [functions.superadmin-tenants]
 verify_jwt = true
-
-[functions.rls-probe-token]
-verify_jwt = false
