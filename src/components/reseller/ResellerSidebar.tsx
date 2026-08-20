@@ -10,6 +10,7 @@ import {
   ImageIcon,
   MessageSquare,
   DollarSign,
+  KeyRound,
   ChevronRight,
   LogOut,
   Building2,
@@ -68,6 +69,7 @@ export const RESELLER_GROUPS: ResellerNavGroup[] = [
     icon: Smartphone,
     items: [
       { value: 'devices', title: 'Devices', titleSo: 'Devices', icon: Smartphone },
+      { value: 'sim-pins', title: 'SIM PINs', titleSo: 'SIM PIN', icon: KeyRound },
     ],
   },
   {
