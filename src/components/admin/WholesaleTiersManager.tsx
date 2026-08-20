@@ -206,7 +206,7 @@ export default function WholesaleTiersManager() {
           </Dialog>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-auto">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">Loading...</div>
         ) : filteredTiers.length === 0 ? (
