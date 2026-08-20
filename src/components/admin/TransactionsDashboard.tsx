@@ -273,6 +273,7 @@ export function TransactionsDashboard() {
         <Button
           variant="outline"
           size="sm"
+          className="w-full md:w-auto"
           onClick={() => exportTransactionsPDF(transactions, {
             totalCount, totalSales, totalProfit,
             period: periodFilter === 'today' ? 'Today' : periodFilter === 'yesterday' ? 'Yesterday' : periodFilter === 'week' ? 'This Week' : periodFilter === 'month' ? 'This Month' : periodFilter === 'year' ? 'This Year' : 'All Time'
@@ -284,6 +285,7 @@ export function TransactionsDashboard() {
         <Button
           variant="outline"
           size="sm"
+          className="w-full md:w-auto"
           onClick={() => exportTransactionsExcel(transactions, {
             totalCount, totalSales, totalProfit,
             period: periodFilter === 'today' ? 'Today' : periodFilter === 'yesterday' ? 'Yesterday' : periodFilter === 'week' ? 'This Week' : periodFilter === 'month' ? 'This Month' : periodFilter === 'year' ? 'This Year' : 'All Time'
