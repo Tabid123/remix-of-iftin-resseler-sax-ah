@@ -186,7 +186,7 @@ export function ResellerStatCards({ onNavigate }: Props) {
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           {cards.map((c) => (
             <button
               key={c.title}
@@ -197,13 +197,13 @@ export function ResellerStatCards({ onNavigate }: Props) {
                 c.gradient
               )}
             >
-              <div className="px-5 py-6 text-center text-primary-foreground">
-                <p className="text-4xl font-extrabold drop-shadow-sm">{c.value}</p>
-                <p className="mt-1 text-lg font-semibold">{c.title}</p>
-                <p className="mt-1 text-xs opacity-90">{c.sub}</p>
+              <div className="px-3 py-5 text-center text-primary-foreground sm:px-5 sm:py-6">
+                <p className="text-2xl font-extrabold drop-shadow-sm sm:text-4xl">{c.value}</p>
+                <p className="mt-1 text-sm font-semibold sm:text-lg">{c.title}</p>
+                <p className="mt-1 text-[11px] opacity-90 sm:text-xs">{c.sub}</p>
               </div>
-              <div className={cn('flex items-center justify-center gap-2 bg-gradient-to-r py-3 text-sm font-medium text-primary-foreground', c.footer)}>
-                <ArrowRight className="h-4 w-4" /> More Info
+              <div className={cn('flex items-center justify-center gap-2 bg-gradient-to-r py-2.5 text-xs font-medium text-primary-foreground sm:py-3 sm:text-sm', c.footer)}>
+                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> More Info
               </div>
             </button>
           ))}
