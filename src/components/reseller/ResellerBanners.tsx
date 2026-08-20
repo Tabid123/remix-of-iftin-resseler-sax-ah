@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, Power } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface Banner {
   id: string;
@@ -20,19 +21,25 @@ interface Banner {
 }
 
 export default function ResellerBanners() {
+  const { currentTenantId } = useTenant();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ banner_image: '', alt_text: '', display_order: 1, rotation_interval: 5 });
 
   const load = async () => {
+    if (!currentTenantId) return;
     setLoading(true);
-    const { data } = await supabase.from('banners_config').select('*').order('display_order');
+    const { data } = await supabase
+      .from('banners_config')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('display_order');
     setBanners((data as Banner[]) ?? []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [currentTenantId]);
 
   const add = async () => {
     if (!form.banner_image.trim()) {
@@ -47,6 +54,7 @@ export default function ResellerBanners() {
       rotation_interval: form.rotation_interval,
       media_type: /\.(mp4|webm|mov)$/i.test(form.banner_image) ? 'video' : 'image',
       is_active: true,
+      tenant_id: currentTenantId,
     }]);
     setSaving(false);
     if (error) { toast({ title: 'Khalad', description: error.message, variant: 'destructive' }); return; }
@@ -55,13 +63,13 @@ export default function ResellerBanners() {
   };
 
   const toggle = async (b: Banner) => {
-    await supabase.from('banners_config').update({ is_active: !b.is_active }).eq('id', b.id);
+    await supabase.from('banners_config').update({ is_active: !b.is_active }).eq('id', b.id).eq('tenant_id', currentTenantId);
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm('Ma hubtaa?')) return;
-    await supabase.from('banners_config').delete().eq('id', id);
+    await supabase.from('banners_config').delete().eq('id', id).eq('tenant_id', currentTenantId);
     load();
   };
 
