@@ -399,9 +399,11 @@ const ProviderSelection = () => {
                   className={`w-full flex items-center gap-3 rounded-2xl p-3 text-left transition-all ${
                     isSelected
                       ? 'bg-white ring-2'
-                      : 'bg-white ring-1 ring-gray-200 hover:ring-gray-300'
+                      : 'bg-white ring-1'
                   } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
+                  style={{
+                    boxShadow: `0 0 0 ${isSelected ? '3px' : '2px'} ${colors.ring}`,
+                  }}
                 >
                   <div
                     className="shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
@@ -445,15 +447,6 @@ const ProviderSelection = () => {
             {filteredProviders.length === 0 && (
               <p className="text-sm text-gray-500 py-4">Shirkad lama helin.</p>
             )}
-          </div>
-        </div>
-
-        {/* HINT */}
-        <div className="px-4 pt-5">
-          <div className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-gray-100 text-center">
-            <p className="text-sm text-gray-600">
-              Dooro shirkad kor ka mid ah si aad u bilowdo iibinta jumlo.
-            </p>
           </div>
         </div>
 
