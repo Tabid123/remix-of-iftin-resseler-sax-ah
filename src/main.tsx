@@ -8,6 +8,35 @@ import { initializeAdMob } from "./services/admob";
 import { initializeOneSignal } from "./services/onesignal";
 import { initializeFirebase, recordError } from "./services/firebase";
 
+// Canonical tenant entry routing must happen before React, auth, splash, or a
+// cached landing route can render. Preserve the complete URL when normalizing
+// www, then send root tenant links straight to the storefront.
+const normalizeTenantEntryUrl = () => {
+  try {
+    const url = new URL(window.location.href);
+
+    if (url.hostname.toLowerCase() === "www.iftinresellers.com") {
+      url.hostname = "iftinresellers.com";
+      window.location.replace(url.toString());
+      return true;
+    }
+
+    const tenantSlug = url.searchParams.get("t")?.trim();
+    if (url.pathname === "/" && tenantSlug) {
+      url.pathname = "/providers";
+      url.searchParams.set("t", tenantSlug);
+      window.location.replace(url.toString());
+      return true;
+    }
+  } catch (error) {
+    console.warn("[Tenant Route] URL normalization failed", error);
+  }
+
+  return false;
+};
+
+const tenantRedirectStarted = normalizeTenantEntryUrl();
+
 // Mark the app as mounted so the HTML watchdog can hide its recovery screen
 // and the service worker knows it's safe to do update work.
 const markAppMounted = () => {
@@ -117,18 +146,22 @@ try { initializeFirebase(); } catch (e) { console.warn("Firebase init failed", e
 // Register service worker — does its own gating, never reloads during boot
 registerServiceWorker();
 
-const container = document.getElementById("root")!;
-const root = createRoot(container);
+if (!tenantRedirectStarted) {
+  const container = document.getElementById("root");
+  if (container) {
+    const root = createRoot(container);
 
-root.render(
-  <React.StrictMode>
-    <AppErrorBoundary>
-      <App />
-    </AppErrorBoundary>
-  </React.StrictMode>
-);
+    root.render(
+      <React.StrictMode>
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
+      </React.StrictMode>
+    );
 
-// Mark mounted on next paint so update logic / splash removal can proceed
-requestAnimationFrame(() => {
-  requestAnimationFrame(markAppMounted);
-});
+    // Mark mounted on next paint so update logic / splash removal can proceed
+    requestAnimationFrame(() => {
+      requestAnimationFrame(markAppMounted);
+    });
+  }
+}
