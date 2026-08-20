@@ -246,6 +246,58 @@ input, textarea, [contenteditable] {
   }
 }
 
+/* Mobile-friendly stacked tables */
+@media (max-width: 640px) {
+  .mobile-table {
+    border: 0;
+    background: transparent;
+  }
+  .mobile-table thead {
+    display: none;
+  }
+  .mobile-table tbody,
+  .mobile-table tr,
+  .mobile-table td {
+    display: block;
+    width: 100%;
+  }
+  .mobile-table tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    overflow: hidden;
+  }
+  .mobile-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+    text-align: right;
+  }
+  .mobile-table td:last-child {
+    border-bottom: 0;
+  }
+  .mobile-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    text-align: left;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+  }
+  .mobile-table td > * {
+    text-align: right;
+  }
+  .mobile-table td .flex {
+    justify-content: flex-end;
+  }
+}
+
 /* Fixed elements should not animate on viewport changes */
 .fixed {
   will-change: transform;
