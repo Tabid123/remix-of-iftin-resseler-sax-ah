@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Building2, RefreshCw, Users, ShoppingCart, DollarSign, Settings2 } from "lucide-react";
+import { Building2, RefreshCw, Users, ShoppingCart, DollarSign, Settings2, Plus } from "lucide-react";
 import TenantDetailDialog from "./TenantDetailDialog";
+import CreateResellerDialog from "./CreateResellerDialog";
 
 interface TenantRow {
   id: string;
@@ -32,6 +33,7 @@ export default function SuperAdminTenants() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -84,9 +86,14 @@ export default function SuperAdminTenants() {
         <h2 className="flex items-center gap-2 text-xl font-bold">
           <Building2 className="h-5 w-5" /> Tenants (Super Admin)
         </h2>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Cusboonaysii
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Reseller cusub
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Cusboonaysii
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -152,6 +159,8 @@ export default function SuperAdminTenants() {
           </Card>
         ))}
       </div>
+
+      <CreateResellerDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={load} />
 
       <TenantDetailDialog
         tenantId={detailId}
