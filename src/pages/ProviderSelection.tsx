@@ -335,7 +335,7 @@ const ProviderSelection = () => {
           <div
             className="relative overflow-hidden rounded-2xl text-white p-5 shadow-lg"
             style={{
-              background: `linear-gradient(135deg, ${brandColor} 0%, #1a8cff 50%, #4dabff 100%)`,
+              background: `linear-gradient(135deg, ${brandColorDark} 0%, ${brandColor} 55%, ${brandColor} 100%)`,
               minHeight: '140px',
             }}
           >
