@@ -129,20 +129,20 @@ const ProviderSelection = () => {
     },
   });
 
-  // Prefetch categories + per-provider packages (preserved)
-  const { data: providerRates = {} } = useQuery<Record<string, number>>({
-    queryKey: ['provider-top-rates'],
+  // Fetch active wholesale tiers per provider for tier-card design
+  const { data: providerTiers = {} } = useQuery<Record<string, any[]>>({
+    queryKey: ['provider-tier-rates'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('provider_wholesale_tiers')
-        .select('provider_id, profit_rate')
-        .eq('is_active', true);
+        .select('provider_id, tier_label, min_amount, max_amount, profit_rate')
+        .eq('is_active', true)
+        .order('min_amount', { ascending: true });
       if (error) throw error;
-      const map: Record<string, number> = {};
+      const map: Record<string, any[]> = {};
       (data || []).forEach((t: any) => {
-        const cur = map[t.provider_id];
-        const val = Number(t.profit_rate) || 0;
-        if (cur === undefined || val > cur) map[t.provider_id] = val;
+        if (!map[t.provider_id]) map[t.provider_id] = [];
+        map[t.provider_id].push(t);
       });
       return map;
     },
@@ -388,9 +388,74 @@ const ProviderSelection = () => {
           <div className="mt-3 flex flex-col gap-2.5">
             {filteredProviders.map((p) => {
               const colors = getProviderColor(p.provider_name);
-              const isSelected = selectedProviderId === p.id;
               const offline = isReallyOnline === false;
-              const rate = providerRates[p.id];
+              const tiers = providerTiers[p.id] || [];
+
+              // If tiers exist, render one card per tier; otherwise fall back to a single provider card
+              if (tiers.length > 0) {
+                return tiers.map((tier) => {
+                  const isSelected = selectedProviderId === p.id;
+                  const rate = Number(tier.profit_rate) || 0;
+                  const minAmount = Number(tier.min_amount) || 0;
+                  const maxAmount = Number(tier.max_amount) || 0;
+                  const label = tier.tier_label || 'T1';
+                  const rangeText = `${minAmount.toFixed(minAmount % 1 === 0 ? 0 : 2)} · ilaa · ${maxAmount.toFixed(maxAmount % 1 === 0 ? 0 : 2)}`;
+                  return (
+                    <button
+                      key={`${p.id}-${label}`}
+                      onClick={() => handleProviderSelect(p)}
+                      disabled={offline}
+                      className={`w-full flex items-center gap-3 rounded-2xl p-3 text-left transition-all ${
+                        isSelected
+                          ? 'bg-white ring-2'
+                          : 'bg-white ring-1 ring-gray-200 hover:ring-gray-300'
+                      } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
+                    >
+                      <div className="relative shrink-0 w-12 h-12">
+                        <div
+                          className="w-full h-full rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
+                          style={{ backgroundColor: colors.bg }}
+                        >
+                          {p.provider_logo ? (
+                            <img
+                              src={p.provider_logo}
+                              alt={`${p.provider_name} logo`}
+                              className="w-full h-full object-contain"
+                              loading="eager"
+                              decoding="async"
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.style.display = 'none';
+                                const parent = el.parentElement;
+                                if (parent) {
+                                  parent.style.backgroundColor = colors.bg;
+                                  parent.textContent = getInitials(p.provider_name);
+                                }
+                              }}
+                            />
+                          ) : (
+                            getInitials(p.provider_name)
+                          )}
+                        </div>
+                        <span className="absolute -bottom-0.5 -right-0.5 bg-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm" style={{ color: colors.bg }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name} - Jumlo</p>
+                        <p className="text-xs text-gray-500 truncate">{rangeText}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-extrabold text-green-600 leading-none">{rate.toFixed(rate % 1 === 0 ? 0 : 1)}%</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">Rate</p>
+                      </div>
+                    </button>
+                  );
+                });
+              }
+
+              const isSelected = selectedProviderId === p.id;
               return (
                 <button
                   key={p.id}
@@ -403,41 +468,40 @@ const ProviderSelection = () => {
                   } ${offline ? 'opacity-60 cursor-not-allowed' : ''}`}
                   style={isSelected ? { boxShadow: `0 0 0 2px ${brandColor}` } : undefined}
                 >
-                  <div
-                    className="shrink-0 w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
-                    style={{ backgroundColor: p.provider_logo ? '#fff' : colors.bg }}
-                  >
-                    {p.provider_logo ? (
-                      <img
-                        src={p.provider_logo}
-                        alt={`${p.provider_name} logo`}
-                        className="w-full h-full object-contain"
-                        loading="eager"
-                        decoding="async"
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          el.style.display = 'none';
-                          const parent = el.parentElement;
-                          if (parent) {
-                            parent.style.backgroundColor = colors.bg;
-                            parent.textContent = getInitials(p.provider_name);
-                          }
-                        }}
-                      />
-                    ) : (
-                      getInitials(p.provider_name)
-                    )}
+                  <div className="relative shrink-0 w-12 h-12">
+                    <div
+                      className="w-full h-full rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-extrabold tracking-wide shadow-sm"
+                      style={{ backgroundColor: colors.bg }}
+                    >
+                      {p.provider_logo ? (
+                        <img
+                          src={p.provider_logo}
+                          alt={`${p.provider_name} logo`}
+                          className="w-full h-full object-contain"
+                          loading="eager"
+                          decoding="async"
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            el.style.display = 'none';
+                            const parent = el.parentElement;
+                            if (parent) {
+                              parent.style.backgroundColor = colors.bg;
+                              parent.textContent = getInitials(p.provider_name);
+                            }
+                          }}
+                        />
+                      ) : (
+                        getInitials(p.provider_name)
+                      )}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 bg-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm" style={{ color: colors.bg }}>
+                      T1
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name}</p>
+                    <p className="text-sm font-bold text-gray-900 truncate">{p.provider_name} - Jumlo</p>
                     <p className="text-xs text-gray-500 truncate">Internet &amp; Jumlo</p>
                   </div>
-                  {rate !== undefined && (
-                    <div className="shrink-0 text-right">
-                      <p className="text-lg font-extrabold text-green-600 leading-none">{rate}%</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">Rate</p>
-                    </div>
-                  )}
                 </button>
               );
             })}
@@ -445,15 +509,6 @@ const ProviderSelection = () => {
             {filteredProviders.length === 0 && (
               <p className="text-sm text-gray-500 py-4">Shirkad lama helin.</p>
             )}
-          </div>
-        </div>
-
-        {/* HINT */}
-        <div className="px-4 pt-5">
-          <div className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-gray-100 text-center">
-            <p className="text-sm text-gray-600">
-              Dooro shirkad kor ka mid ah si aad u bilowdo iibinta jumlo.
-            </p>
           </div>
         </div>
 
