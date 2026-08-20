@@ -35,6 +35,8 @@ interface MemberRow {
   banned: boolean;
 }
 
+const PUBLIC_BASE = "https://iftinresellers.com";
+
 const fmt = (v?: string | null) =>
   v ? new Date(v).toLocaleString("en-GB", { timeZone: "Africa/Mogadishu" }) : "—";
 
@@ -86,7 +88,7 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tenantId]);
 
-  const link = tenant ? `${window.location.origin}/?t=${tenant.slug}` : "";
+  const link = tenant ? `${PUBLIC_BASE}/?t=${tenant.slug}` : "";
 
   const copy = async (value: string, label: string) => {
     try {
@@ -183,11 +185,11 @@ export default function TenantDetailDialog({ tenantId, open, onOpenChange, onCha
                 </Button>
               </div>
               <div className="flex gap-2">
-                <Input readOnly value={`${window.location.origin}/admin/login`} className="font-mono text-xs" />
+                <Input readOnly value={`${PUBLIC_BASE}/admin/login`} className="font-mono text-xs" />
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => copy(`${window.location.origin}/admin/login`, "Admin link-ga")}
+                  onClick={() => copy(`${PUBLIC_BASE}/admin/login`, "Admin link-ga")}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
