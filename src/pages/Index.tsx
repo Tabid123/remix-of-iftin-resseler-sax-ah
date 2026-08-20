@@ -12,7 +12,7 @@ const Index = () => {
   const hasInitialized = useRef(false);
   const { isReallyOnline } = useConnectivity();
   const { forceRefreshCache } = useOfflineCache();
-  const { tenant, logoUrl, name: brandName, primary: brandColor, primaryDark: brandColorDark } = useBrand();
+  const { tenant, logoUrl, name: brandName, primary: brandColor } = useBrand();
 
   // Background cache refresh (fire-and-forget)
   const splashRefreshDone = useRef(false);
@@ -44,7 +44,7 @@ const Index = () => {
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center z-50"
-      style={{ background: `linear-gradient(135deg, ${brandColor} 0%, ${brandColorDark} 100%)` }}
+      style={{ backgroundColor: brandColor }}
     >
       {logoUrl ? (
         <img src={logoUrl} alt={`${brandName} logo`} className="w-36 h-36 rounded-3xl object-cover animate-pulse" />

@@ -5,8 +5,8 @@ interface State {
   error?: Error;
 }
 
-const splashGradient: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #0099ff 0%, #0066cc 100%)',
+const splashBackground: React.CSSProperties = {
+  backgroundColor: '#0066cc',
 };
 
 const RELOAD_KEY = '__iftin_boundary_reloads__';
@@ -50,7 +50,7 @@ class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, St
     return (
       <div
         style={{
-          ...splashGradient,
+          ...splashBackground,
           position: 'fixed',
           inset: 0,
           display: 'flex',
