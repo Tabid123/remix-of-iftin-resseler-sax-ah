@@ -2,19 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConnectivity } from '@/contexts/ConnectivityContext';
 import { useOfflineCache } from '@/hooks/useOfflineCache';
-import { useTenant } from '@/contexts/TenantContext';
+import { useBrand } from '@/hooks/useBrand';
 
-// Darken a hex color by a ratio (0-1) for the splash gradient
-const shadeHex = (hex: string, ratio = 0.3) => {
-  const m = /^#?([a-f\d]{6})$/i.exec(hex.trim());
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-    .map((v) => Math.max(0, Math.round(v * (1 - ratio))))
-    .map((v) => v.toString(16).padStart(2, '0'))
-    .join('');
-  return `#${c}`;
-};
 
 const Index = () => {
   const navigate = useNavigate();
@@ -23,10 +12,7 @@ const Index = () => {
   const hasInitialized = useRef(false);
   const { isReallyOnline } = useConnectivity();
   const { forceRefreshCache } = useOfflineCache();
-  const { tenant, logoUrl } = useTenant();
-  const brandName = tenant?.name || 'Iftin Internet';
-  const brandColor = tenant?.primary_color || '#0099ff';
-  const brandColorDark = tenant?.primary_color ? shadeHex(tenant.primary_color, 0.35) : '#0066cc';
+  const { tenant, logoUrl, name: brandName, primary: brandColor, primaryDark: brandColorDark } = useBrand();
 
   // Background cache refresh (fire-and-forget)
   const splashRefreshDone = useRef(false);
