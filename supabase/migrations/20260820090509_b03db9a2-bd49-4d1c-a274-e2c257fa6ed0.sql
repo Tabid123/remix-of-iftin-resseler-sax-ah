@@ -1,0 +1,1 @@
+grant execute on function public.__rls_probe(uuid) to supabase_read_only_user;
