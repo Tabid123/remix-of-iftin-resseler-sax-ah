@@ -2075,6 +2075,7 @@ export type Database = {
           created_at: string
           id: string
           member_role: string
+          role: string
           tenant_id: string
           user_id: string
         }
@@ -2082,6 +2083,7 @@ export type Database = {
           created_at?: string
           id?: string
           member_role?: string
+          role?: string
           tenant_id: string
           user_id: string
         }
@@ -2089,6 +2091,7 @@ export type Database = {
           created_at?: string
           id?: string
           member_role?: string
+          role?: string
           tenant_id?: string
           user_id?: string
         }
@@ -2110,8 +2113,10 @@ export type Database = {
           logo_url: string | null
           name: string
           notes: string | null
+          owner_id: string | null
           plan: string
           primary_color: string | null
+          secondary_color: string | null
           slug: string
           status: string
           updated_at: string
@@ -2123,8 +2128,10 @@ export type Database = {
           logo_url?: string | null
           name: string
           notes?: string | null
+          owner_id?: string | null
           plan?: string
           primary_color?: string | null
+          secondary_color?: string | null
           slug: string
           status?: string
           updated_at?: string
@@ -2136,8 +2143,10 @@ export type Database = {
           logo_url?: string | null
           name?: string
           notes?: string | null
+          owner_id?: string | null
           plan?: string
           primary_color?: string | null
+          secondary_color?: string | null
           slug?: string
           status?: string
           updated_at?: string
@@ -2874,6 +2883,7 @@ export type Database = {
           slug: string
         }[]
       }
+      get_user_tenant_ids: { Args: never; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
