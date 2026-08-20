@@ -102,7 +102,7 @@ const PaymentProviders = () => {
       }
       
       const { data, error } = await supabase
-        .from('delivery_instructions')
+        .from('customer_delivery_instructions')
         .select('*')
         .eq('provider_id', packageData.providerId);
       
