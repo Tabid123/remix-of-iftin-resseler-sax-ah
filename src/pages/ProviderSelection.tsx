@@ -134,7 +134,7 @@ const ProviderSelection = () => {
     queryKey: ['provider-top-rates'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('provider_wholesale_tiers')
+        .from('customer_wholesale_tiers')
         .select('provider_id, profit_rate')
         .eq('is_active', true);
       if (error) throw error;
