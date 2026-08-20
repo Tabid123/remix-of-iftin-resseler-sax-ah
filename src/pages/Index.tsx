@@ -12,7 +12,7 @@ const Index = () => {
   const hasInitialized = useRef(false);
   const { isReallyOnline } = useConnectivity();
   const { forceRefreshCache } = useOfflineCache();
-  const { tenant, logoUrl, name: brandName, primary: brandColor, primaryDark: brandColorDark } = useBrand();
+  const { tenant, logoUrl, name: brandName, primary: brandColor } = useBrand();
 
   // Background cache refresh (fire-and-forget)
   const splashRefreshDone = useRef(false);

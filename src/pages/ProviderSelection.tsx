@@ -217,7 +217,7 @@ const ProviderSelection = () => {
   );
 
   // Tenant (reseller) branding — falls back to default app brand
-  const { logoUrl, name: brandName, primary: brandColor, primaryDark: brandColorDark } = useBrand();
+  const { logoUrl, name: brandName, primary: brandColor } = useBrand();
 
   const handleProviderSelect = (p: Provider) => {
     if (isReallyOnline === false) {
