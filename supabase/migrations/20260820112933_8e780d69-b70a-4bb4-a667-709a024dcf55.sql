@@ -1,0 +1,4 @@
+UPDATE public.providers_config SET provider_logo = '/__l5e/assets-v1/a9bb6a47-393d-48af-b204-62b692d314dc/hormuud.png' WHERE lower(provider_name) LIKE '%hormuud%';
+UPDATE public.providers_config SET provider_logo = '/__l5e/assets-v1/687f358b-8ca5-4251-a584-72c62226a46a/somtel.png' WHERE lower(provider_name) LIKE '%somtel%';
+UPDATE public.providers_config SET provider_logo = '/__l5e/assets-v1/a38a6f23-adf1-4168-918e-8209ae31ee01/somnet.png' WHERE lower(provider_name) LIKE '%somnet%';
+UPDATE public.providers_config SET provider_logo = '/__l5e/assets-v1/7d4640a8-67cc-4e8d-942e-0fa9b670b2b3/amtel.png' WHERE lower(provider_name) LIKE '%amtel%';
