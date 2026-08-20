@@ -235,7 +235,7 @@ const ProviderSelection = () => {
       <div
         className="fixed top-0 left-0 right-0 z-40"
         style={{
-          background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColorDark} 100%)`,
+          backgroundColor: brandColor,
           paddingTop: 'var(--effective-safe-area-top, 0px)',
         }}
       >
@@ -320,7 +320,7 @@ const ProviderSelection = () => {
           <div
             className="relative overflow-hidden rounded-2xl text-white p-5 shadow-lg"
             style={{
-              background: `linear-gradient(135deg, ${brandColorDark} 0%, ${brandColor} 55%, ${brandColor} 100%)`,
+              backgroundColor: brandColor,
               minHeight: '140px',
             }}
           >
