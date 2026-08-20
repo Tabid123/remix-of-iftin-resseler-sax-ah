@@ -145,6 +145,7 @@ export default function ResellerDashboard() {
             {activeTab === 'daily-orders' && <DailyOrdersManager />}
             {activeTab === 'wholesale-tiers' && <WholesaleTiersManager />}
             {activeTab === 'devices' && <DeviceManagement />}
+            {activeTab === 'sim-pins' && <ResellerSimPins />}
             {activeTab === 'send-notification' && <SendNotification />}
             {activeTab === 'banners' && <ResellerBanners />}
           </Suspense>
