@@ -19,6 +19,7 @@ import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { logScreenView } from '@/services/firebase';
 import { useConnectivity } from '@/contexts/ConnectivityContext';
 import { useBrand } from '@/hooks/useBrand';
+import { useTenant } from '@/contexts/TenantContext';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Provider {
@@ -74,6 +75,9 @@ const ProviderSelection = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isReallyOnline } = useConnectivity();
+  const { tenant, loading: tenantLoading } = useTenant();
+  const tenantId = tenant?.id ?? null;
+  const providerCacheKey = tenantId ? `offline_providers:${tenantId}` : null;
 
   const [search, setSearch] = useState('');
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -108,34 +112,34 @@ const ProviderSelection = () => {
   }, [queryClient]);
 
   const { data: providers = [] } = useQuery<Provider[]>({
-    queryKey: ['providers'],
+    queryKey: ['providers', tenantId],
     queryFn: async () => {
       if (isReallyOnline === false) {
-        const cached = localStorage.getItem('offline_providers');
+        const cached = providerCacheKey ? localStorage.getItem(providerCacheKey) : null;
         return cached ? JSON.parse(cached) : [];
       }
-      const { data, error } = await supabase.rpc('get_active_providers');
+      const { data, error } = await supabase.rpc('get_active_providers', { p_tenant_id: tenantId });
       if (error) throw error;
+      if (providerCacheKey) localStorage.setItem(providerCacheKey, JSON.stringify(data || []));
       return data || [];
     },
+    enabled: !tenantLoading && !!tenantId,
     staleTime: 30 * 1000,
     refetchOnMount: 'always',
     retry: false,
     initialData: () => {
-      try {
-        const cached = localStorage.getItem('offline_providers');
-        return cached ? JSON.parse(cached) : [];
-      } catch { return []; }
+      return [];
     },
   });
 
   // Prefetch categories + per-provider packages (preserved)
   const { data: providerRates = {} } = useQuery<Record<string, number>>({
-    queryKey: ['provider-top-rates'],
+    queryKey: ['provider-top-rates', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('customer_wholesale_tiers')
         .select('provider_id, profit_rate')
+        .eq('tenant_id', tenantId)
         .eq('is_active', true);
       if (error) throw error;
       const map: Record<string, number> = {};
@@ -148,6 +152,7 @@ const ProviderSelection = () => {
     },
     staleTime: 5 * 60 * 1000,
     retry: false,
+    enabled: !tenantLoading && !!tenantId,
   });
 
   useEffect(() => {
@@ -155,7 +160,7 @@ const ProviderSelection = () => {
     queryClient.prefetchQuery({
       queryKey: ['categories'],
       queryFn: async () => {
-        const { data, error } = await supabase.rpc('get_active_categories');
+        const { data, error } = await supabase.rpc('get_active_categories', { p_tenant_id: tenantId });
         if (error) throw error;
         return data || [];
       },
@@ -165,7 +170,7 @@ const ProviderSelection = () => {
       queryClient.prefetchQuery({
         queryKey: ['packages', p.id],
         queryFn: async () => {
-          const { data, error } = await supabase.rpc('get_public_packages', { provider_uuid: p.id });
+          const { data, error } = await supabase.rpc('get_public_packages', { provider_uuid: p.id, p_tenant_id: tenantId });
           if (error) throw error;
           return data || [];
         },
@@ -186,7 +191,7 @@ const ProviderSelection = () => {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers]);
+  }, [providers, tenantId]);
 
   // (auto-detect by phone removed — user picks provider directly to open Jumlo flow)
 
@@ -194,14 +199,14 @@ const ProviderSelection = () => {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+      await queryClient.invalidateQueries({ queryKey: ['providers', tenantId] });
       await queryClient.invalidateQueries({ queryKey: ['featuredPackages'] });
       await queryClient.invalidateQueries({ queryKey: ['banners'] });
     } finally {
       setIsRefreshing(false);
       setPullDistance(0);
     }
-  }, [queryClient]);
+  }, [queryClient, tenantId]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (contentRef.current && contentRef.current.scrollTop === 0) {
@@ -238,6 +243,14 @@ const ProviderSelection = () => {
 
   // Tenant (reseller) branding — falls back to default app brand
   const { logoUrl, name: brandName, primary: brandColor } = useBrand();
+
+  if (tenantLoading || !tenantId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <RefreshCw className="h-7 w-7 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleProviderSelect = (p: Provider) => {
     if (isReallyOnline === false) {

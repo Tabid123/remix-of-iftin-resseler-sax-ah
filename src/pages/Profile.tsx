@@ -6,9 +6,11 @@ import { toast } from 'sonner';
 import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { supabase } from '@/integrations/supabase/client';
+import { useBrand } from '@/hooks/useBrand';
 
 const Profile = () => {
   const navigate = useNavigate();
+  const { name: brandName, primary } = useBrand();
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -64,16 +66,16 @@ const Profile = () => {
 
   const handleShare = async () => {
     const shareData = {
-      title: 'Iftin Internet',
-      text: 'Soo degso Iftin App - Internet bundles iibso si fudud!',
-      url: 'https://iftininternet.com'
+      title: brandName,
+      text: `Soo degso ${brandName} - Internet bundles iibso si fudud!`,
+      url: window.location.origin
     };
 
     try {
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText('https://iftininternet.com');
+        await navigator.clipboard.writeText(window.location.href);
         toast.success('Link waa la copy-gareeye!');
       }
     } catch (err) {}
@@ -90,7 +92,7 @@ const Profile = () => {
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div
         style={{
-          backgroundColor: '#0099ff',
+           backgroundColor: primary,
           paddingTop: 'calc(0.75rem + var(--effective-safe-area-top, 0px))',
           boxSizing: 'border-box' as const
         }}

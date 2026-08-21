@@ -11,6 +11,7 @@ import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
 import { generateInvoiceImage } from '@/utils/invoiceGenerator';
 import { downloadBlobInBrowser } from '@/utils/downloadFile';
+import { useBrand } from '@/hooks/useBrand';
 
 // Helper function to get invoice image - uses cached URL if available, otherwise generates on-demand
 const getInvoiceBlob = async (order: any): Promise<Blob> => {
@@ -34,6 +35,7 @@ const normalizeSomaliPhone = (phone?: string | null) => (phone || '').replace(/^
 
 const OrderHistory = () => {
   const navigate = useNavigate();
+  const { primary } = useBrand();
   const {
     toast
   } = useToast();
@@ -188,7 +190,7 @@ const OrderHistory = () => {
   return <div className="min-h-screen bg-background pb-24">
       {/* Header with safe-area padding for Android 12+ */}
       <div style={{
-        backgroundColor: '#0099ff',
+        backgroundColor: primary,
         paddingTop: 'calc(1rem + var(--effective-safe-area-top, 0px))',
         boxSizing: 'border-box' as const
       }} className="text-white py-4 px-4">

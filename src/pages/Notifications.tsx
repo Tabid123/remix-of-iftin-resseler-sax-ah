@@ -6,9 +6,11 @@ import { format } from 'date-fns';
 import { useNotifications } from '@/hooks/useNotifications';
 import { BottomNavigation } from '@/components/BottomNavigation';
 import { showBannerAd, hideBannerAd } from '@/services/admob';
+import { useBrand } from '@/hooks/useBrand';
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const { primary } = useBrand();
   const { notifications, isLoading, markAsSeen } = useNotifications();
 
   // Mark as seen when visiting the page
@@ -29,7 +31,7 @@ const Notifications = () => {
       {/* Header with safe-area padding for Android 12+ */}
       <div 
         style={{ 
-          backgroundColor: '#0099ff',
+          backgroundColor: primary,
           paddingTop: 'calc(1rem + var(--effective-safe-area-top, 0px))',
           boxSizing: 'border-box' as const
         }} 

@@ -179,14 +179,6 @@ export function ResellerSidebar({ activeTab, onTabChange, onLogout }: Props) {
 
         <div className="my-3 border-t border-sidebar-border" />
 
-        <NavLink
-          to="/admin"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base text-muted-foreground transition-colors hover:bg-sidebar-accent"
-        >
-          <LayoutDashboard className="h-5 w-5" />
-          Full Admin Dashboard
-        </NavLink>
-
         <button
           onClick={onLogout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base text-destructive transition-colors hover:bg-destructive/10"

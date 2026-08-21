@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { Shield, Loader2, AlertTriangle, KeyRound, Crown } from 'lucide-react';
+import { Shield, Loader2, AlertTriangle, KeyRound } from 'lucide-react';
 import iftinLogo from '@/assets/iftin-logo.jpg';
 
 // TEMPORARY EMERGENCY BYPASS - Feb 22, 2026 kadib waa la saari doonaa
@@ -82,60 +82,41 @@ const AdminLogin = () => {
         throw error;
       }
 
-      // Check if user has admin role
+      // Platform roles and tenant roles are intentionally separate.
       const { data: roleData } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', data.user.id)
-        .eq('role', 'admin')
+        .in('role', ['admin', 'super_admin'])
+        .limit(1)
         .maybeSingle();
 
-      if (!roleData) {
-        // Tenant manager (reseller) → reseller dashboard
-        const { data: memberships } = await supabase
-          .from('tenant_members')
-          .select('member_role, role')
-          .eq('user_id', data.user.id);
-
-        const isTenantManager = (memberships ?? []).some((m: any) =>
-          ['owner', 'admin', 'manager'].includes(String(m.member_role ?? m.role ?? '').toLowerCase())
-        );
-
-        if (isTenantManager) {
-          toast({ title: 'Guul', description: 'Waad soo gashay' });
-          navigate('/reseller');
-          setLoading(false);
-          return;
-        }
-
-        // First-admin bootstrap: if NO admin exists in the system yet,
-        // grant admin role to this newly signed-in user.
-        const { data: bootstrapResult } = await supabase.rpc('bootstrap_first_admin');
-        const bootstrapped = (bootstrapResult as any)?.ok === true;
-
-        if (!bootstrapped) {
-          await supabase.auth.signOut();
-          toast({
-            title: 'Ma lihid fasax',
-            description: 'Admin kaliya ayaa geli kara',
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
-        }
-
-        toast({
-          title: '👑 First Admin',
-          description: 'Waxaa lagu sameeyay admin-ka ugu horreeya',
-        });
+      if (roleData) {
+        toast({ title: 'Guul', description: 'Waad soo gashay' });
+        navigate('/admin', { replace: true });
+        return;
       }
 
-      toast({
-        title: 'Guul',
-        description: 'Waad soo gashay',
-      });
+      const { data: memberships, error: membershipError } = await supabase
+        .from('tenant_members')
+        .select('tenant_id, member_role, role, tenants(status)')
+        .eq('user_id', data.user.id);
+      if (membershipError) throw membershipError;
 
-      navigate('/admin');
+      const managerMembership = (memberships ?? []).find((m: any) =>
+        ['owner', 'admin', 'manager'].includes(String(m.member_role ?? m.role ?? '').toLowerCase()) &&
+        m.tenants?.status === 'active'
+      );
+      if (managerMembership?.tenant_id) {
+        localStorage.setItem('active_tenant_id', managerMembership.tenant_id);
+        localStorage.removeItem('public_tenant_slug');
+        toast({ title: 'Guul', description: 'Dashboard-ka reseller-ka waa la furay' });
+        navigate('/reseller', { replace: true });
+        return;
+      }
+
+      await supabase.auth.signOut();
+      toast({ title: 'Ma lihid fasax', description: 'Koontadan reseller firfircoon kuma xirna', variant: 'destructive' });
 
     } catch (error: any) {
       // Haddii connection-ka oo dhan fashilmo (network error)
