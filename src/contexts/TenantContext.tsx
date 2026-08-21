@@ -65,6 +65,8 @@ const isHttpUrl = (v?: string | null) => !!v && /^https?:\/\//i.test(v);
 
 export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
+  const [publicLoading, setPublicLoading] = useState(true);
+  const [membershipLoading, setMembershipLoading] = useState(true);
   const [tenants, setTenants] = useState<TenantMembership[]>([]);
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(
     () => { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } }
@@ -75,9 +77,13 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   // Anonymous storefront branding (logo + primary color) via public RPC
   const loadPublicTenant = useCallback(async () => {
     const slug = resolvePublicSlug();
-    if (!slug) { setPublicTenant(null); return; }
+    if (!slug) { setPublicTenant(null); setPublicLoading(false); return; }
     const { data, error } = await supabase.rpc('get_tenant_by_slug', { _slug: slug });
-    if (error || !data || !(data as any[]).length) { setPublicTenant(null); return; }
+    if (error || !data || !(data as any[]).length) {
+      setPublicTenant(null);
+      setPublicLoading(false);
+      return;
+    }
     const t: any = (data as any[])[0];
     setPublicTenant({
       id: t.id,
@@ -89,13 +95,14 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
       plan: null,
       role: 'visitor',
     });
+    setPublicLoading(false);
   }, []);
 
   const loadTenants = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
       setTenants([]);
-      setLoading(false);
+      setMembershipLoading(false);
       return;
     }
 
@@ -106,7 +113,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (error) {
       console.error('[TenantContext] load failed', error.message);
-      setLoading(false);
+      setMembershipLoading(false);
       return;
     }
 
@@ -116,8 +123,12 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
 
     setTenants(list);
     setCurrentTenantId((prev) => (prev && list.some((t) => t.id === prev) ? prev : list[0]?.id ?? null));
-    setLoading(false);
+    setMembershipLoading(false);
   }, []);
+
+  useEffect(() => {
+    setLoading(publicLoading || membershipLoading);
+  }, [publicLoading, membershipLoading]);
 
   useEffect(() => {
     loadTenants();
@@ -129,7 +140,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   }, [loadTenants, loadPublicTenant]);
 
   const tenant = useMemo(
-    () => tenants.find((t) => t.id === currentTenantId) ?? tenants[0] ?? publicTenant,
+    () => publicTenant ?? tenants.find((t) => t.id === currentTenantId) ?? tenants[0] ?? null,
     [tenants, currentTenantId, publicTenant]
   );
 
@@ -157,7 +168,28 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
   // Dynamic branding CSS variables
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--tenant-primary', tenant?.primary_color || '#000000');
+    const primary = tenant?.primary_color || '#0099ff';
+    const match = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(primary);
+    if (match) {
+      const r = parseInt(match[1], 16) / 255;
+      const g = parseInt(match[2], 16) / 255;
+      const b = parseInt(match[3], 16) / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      let h = 0;
+      if (delta) {
+        if (max === r) h = 60 * (((g - b) / delta) % 6);
+        else if (max === g) h = 60 * ((b - r) / delta + 2);
+        else h = 60 * ((r - g) / delta + 4);
+      }
+      if (h < 0) h += 360;
+      const l = (max + min) / 2;
+      const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+      root.style.setProperty('--primary', `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`);
+      root.style.setProperty('--ring', `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`);
+    }
+    root.style.setProperty('--tenant-primary', primary);
     root.style.setProperty('--tenant-secondary', tenant?.secondary_color || '#ffffff');
   }, [tenant?.primary_color, tenant?.secondary_color]);
 

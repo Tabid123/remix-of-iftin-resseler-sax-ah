@@ -56,7 +56,7 @@ export default function ResellerDashboard() {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const so = language === 'so';
-  const { tenant, logoUrl } = useTenant();
+  const { tenant, logoUrl, loading: tenantLoading } = useTenant();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -81,7 +81,7 @@ export default function ResellerDashboard() {
     setMobileOpen(false);
   };
 
-  if (checking) {
+  if (checking || tenantLoading || !tenant) {
     return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
@@ -96,7 +96,7 @@ export default function ResellerDashboard() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Brand bar */}
-        <div className="flex items-center justify-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3">
+        <div className="flex items-center justify-center gap-3 px-4 py-3" style={{ backgroundColor: tenant.primary_color || 'var(--tenant-primary)' }}>
           {logoUrl && <img src={logoUrl} alt={`${tenant?.name ?? 'Reseller'} logo`} className="h-9 w-9 rounded-lg object-cover" />}
           <span className="text-xl font-bold text-primary-foreground">{tenant?.name ?? 'Reseller'}</span>
           <span className="flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground">
@@ -105,7 +105,7 @@ export default function ResellerDashboard() {
         </div>
 
         {/* Toolbar */}
-        <header className="flex items-center gap-3 bg-gradient-to-r from-blue-700 to-blue-600 px-3 py-2">
+        <header className="flex items-center gap-3 px-3 py-2" style={{ backgroundColor: tenant.primary_color || 'var(--tenant-primary)' }}>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-primary-foreground/15 md:hidden">

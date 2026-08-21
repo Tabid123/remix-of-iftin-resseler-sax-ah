@@ -25,23 +25,24 @@ const ResellerRoute = ({ children }: { children: React.ReactNode }) => {
       const [{ data: membership }, { data: superRole }] = await Promise.all([
         supabase
           .from('tenant_members')
-          .select('member_role, role, tenant_id')
+          .select('member_role, role, tenant_id, tenants(status)')
           .eq('user_id', user.id),
         supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', user.id)
           .in('role', ['admin', 'super_admin'])
+          .limit(1)
           .maybeSingle(),
       ]);
 
       const isManager = (membership ?? []).some((m: any) =>
-        MANAGER_ROLES.includes(String(m.member_role ?? m.role ?? '').toLowerCase())
+        MANAGER_ROLES.includes(String(m.member_role ?? m.role ?? '').toLowerCase()) && m.tenants?.status === 'active'
       );
 
       if (!active) return;
 
-      if (isManager || superRole) {
+      if (isManager) {
         setAllowed(true);
         setChecking(false);
         return;
@@ -52,7 +53,7 @@ const ResellerRoute = ({ children }: { children: React.ReactNode }) => {
         description: 'Kaliya maamulaha tenant-ka ayaa geli kara reseller dashboard-ka',
         variant: 'destructive',
       });
-      navigate('/admin/login', { replace: true });
+      navigate(superRole ? '/admin' : '/admin/login', { replace: true });
     };
 
     check();

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useBrand } from '@/hooks/useBrand';
 
 const providerColors: Record<string, { light: string; dark: string }> = {
   hormuud: { light: '#00c853', dark: '#00c853' },
@@ -24,9 +25,12 @@ const pageColors: Record<string, { light: string; dark: string }> = {
 export const StatusBarColor = () => {
   const location = useLocation();
   const { theme } = useTheme();
+  const { primary } = useBrand();
 
   useEffect(() => {
-    let color = pageColors[location.pathname]?.[theme] || pageColors['/'][theme];
+    let color = location.pathname === '/payment-success'
+      ? pageColors['/payment-success'][theme]
+      : primary;
 
     // Check if we have provider name in location state
     const providerName = (location.state as { providerName?: string })?.providerName?.toLowerCase().trim();
@@ -42,7 +46,7 @@ export const StatusBarColor = () => {
       document.head.appendChild(metaTag);
     }
     metaTag.setAttribute('content', color);
-  }, [location.pathname, location.state, theme]);
+  }, [location.pathname, location.state, theme, primary]);
 
   return null;
 };
