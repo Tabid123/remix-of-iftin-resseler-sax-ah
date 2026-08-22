@@ -127,10 +127,8 @@ const ProviderSelection = () => {
     staleTime: 30 * 1000,
     refetchOnMount: 'always',
     retry: false,
-    initialData: () => {
-      return [];
-    },
   });
+
 
   // Prefetch categories + per-provider packages (preserved)
   const { data: providerRates = {} } = useQuery<Record<string, number>>({
