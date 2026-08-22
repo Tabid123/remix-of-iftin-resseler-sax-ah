@@ -126,9 +126,19 @@ Deno.serve(async (req) => {
         throw tInsErr;
       }
 
-      await supabaseAdmin
+      const { error: memErr } = await supabaseAdmin
         .from("tenant_members")
-        .insert({ tenant_id: tenant.id, user_id: userId, member_role: "owner", role: "owner" });
+        .upsert(
+          { tenant_id: tenant.id, user_id: userId, member_role: "owner", role: "owner" },
+          { onConflict: "tenant_id,user_id" },
+        );
+      if (memErr) {
+        await supabaseAdmin.from("tenants").delete().eq("id", tenant.id);
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        throw memErr;
+      }
+      await supabaseAdmin.from("tenants").update({ owner_id: userId }).eq("id", tenant.id);
+
 
       await supabaseAdmin.from("tenant_admin_credentials").insert({
         tenant_id: tenant.id,
