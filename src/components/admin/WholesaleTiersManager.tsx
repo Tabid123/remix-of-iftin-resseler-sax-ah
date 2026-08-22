@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface Provider { id: string; provider_name: string; }
 interface Tier {
@@ -42,6 +43,8 @@ const emptyForm = {
 
 export default function WholesaleTiersManager() {
   const { toast } = useToast();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id ?? null;
   const [providers, setProviders] = useState<Provider[]>([]);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [filterProvider, setFilterProvider] = useState<string>('all');
@@ -52,16 +55,19 @@ export default function WholesaleTiersManager() {
 
   const load = async () => {
     setLoading(true);
-    const [{ data: pr }, { data: tr }] = await Promise.all([
-      supabase.from('providers_config').select('id, provider_name').eq('is_active', true).order('display_order'),
-      supabase.from('provider_wholesale_tiers').select('*').order('display_order').order('min_amount'),
-    ]);
+    let providerQuery = supabase.from('providers_config').select('id, provider_name').eq('is_active', true).order('display_order');
+    let tierQuery = supabase.from('provider_wholesale_tiers').select('*').order('display_order').order('min_amount');
+    if (tenantId) {
+      providerQuery = providerQuery.eq('tenant_id', tenantId);
+      tierQuery = tierQuery.eq('tenant_id', tenantId);
+    }
+    const [{ data: pr }, { data: tr }] = await Promise.all([providerQuery, tierQuery]);
     setProviders(pr || []);
     setTiers((tr as Tier[]) || []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tenantId]);
 
   const openNew = () => {
     setEditingId(null);
@@ -103,6 +109,7 @@ export default function WholesaleTiersManager() {
       profit_rate: rate,
       display_order: order,
       is_active: form.is_active,
+      ...(tenantId ? { tenant_id: tenantId } : {}),
     };
 
     const res = editingId
