@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("tenant_admin_credentials").insert({
         tenant_id: tenant.id,
         user_id: userId,
-        email: String(email).trim(),
+        email: cleanEmail,
         initial_password: String(password),
       });
 
