@@ -29,6 +29,7 @@ import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/AdminLogin";
+import ResellerLogin from "./pages/ResellerLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 const ResellerDashboard = React.lazy(() => import("./pages/ResellerDashboard"));
 import DownloadApp from "./pages/DownloadApp";
@@ -106,6 +107,7 @@ const AppContent = () => {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/reseller/login" element={<ResellerLogin />} />
         <Route path="/reseller" element={<ResellerRoute><React.Suspense fallback={null}><ResellerDashboard /></React.Suspense></ResellerRoute>} />
         <Route path="/download-app" element={<DownloadApp />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />

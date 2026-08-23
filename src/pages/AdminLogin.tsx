@@ -97,26 +97,13 @@ const AdminLogin = () => {
         return;
       }
 
-      const { data: memberships, error: membershipError } = await supabase
-        .from('tenant_members')
-        .select('tenant_id, member_role, role, tenants(status)')
-        .eq('user_id', data.user.id);
-      if (membershipError) throw membershipError;
-
-      const managerMembership = (memberships ?? []).find((m: any) =>
-        ['owner', 'admin', 'manager'].includes(String(m.member_role ?? m.role ?? '').toLowerCase()) &&
-        m.tenants?.status === 'active'
-      );
-      if (managerMembership?.tenant_id) {
-        localStorage.setItem('active_tenant_id', managerMembership.tenant_id);
-        localStorage.removeItem('public_tenant_slug');
-        toast({ title: 'Guul', description: 'Dashboard-ka reseller-ka waa la furay' });
-        navigate('/reseller', { replace: true });
-        return;
-      }
-
+      // Resellers must use their own login page — no mixing with platform admins.
       await supabase.auth.signOut();
-      toast({ title: 'Ma lihid fasax', description: 'Koontadan reseller firfircoon kuma xirna', variant: 'destructive' });
+      toast({
+        title: 'Ma lihid fasax',
+        description: 'Kani waa admin-ka platform-ka. Resellers-ku ha isticmaalaan /reseller/login',
+        variant: 'destructive',
+      });
 
     } catch (error: any) {
       // Haddii connection-ka oo dhan fashilmo (network error)

@@ -20,7 +20,7 @@ const ResellerRoute = ({ children }: { children: React.ReactNode }) => {
 
     const check = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/admin/login', { replace: true }); return; }
+      if (!user) { navigate('/reseller/login', { replace: true }); return; }
 
       const [{ data: membership }, { data: superRole }] = await Promise.all([
         supabase
@@ -53,13 +53,13 @@ const ResellerRoute = ({ children }: { children: React.ReactNode }) => {
         description: 'Kaliya maamulaha tenant-ka ayaa geli kara reseller dashboard-ka',
         variant: 'destructive',
       });
-      navigate(superRole ? '/admin' : '/admin/login', { replace: true });
+      navigate(superRole ? '/admin' : '/reseller/login', { replace: true });
     };
 
     check();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') navigate('/admin/login', { replace: true });
+      if (event === 'SIGNED_OUT') navigate('/reseller/login', { replace: true });
     });
 
     return () => { active = false; sub.subscription.unsubscribe(); };
