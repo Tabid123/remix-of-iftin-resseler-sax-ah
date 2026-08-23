@@ -99,14 +99,31 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (dup) throw new Error("Slug-gan hore ayaa loo isticmaalay");
 
+      const cleanEmail = String(email).trim().toLowerCase();
       const { data: created, error: uErr } = await supabaseAdmin.auth.admin.createUser({
-        email: String(email).trim(),
+        email: cleanEmail,
         password: String(password),
         email_confirm: true,
         user_metadata: { skip_auto_tenant: "true", company_name: name },
       });
-      if (uErr || !created?.user) throw new Error(uErr?.message || "User lama abuurin");
-      const userId = created.user.id;
+
+      let userId = created?.user?.id ?? null;
+
+      // Email already exists → reuse that account and reset its password so the
+      // credentials stored/displayed for this reseller always work.
+      if (!userId) {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const existing = list?.users?.find(
+          (u: { email?: string | null }) => (u.email ?? "").toLowerCase() === cleanEmail,
+        );
+        if (!existing) throw new Error(uErr?.message || "User lama abuurin");
+        const { error: pwErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+          password: String(password),
+          email_confirm: true,
+        });
+        if (pwErr) throw pwErr;
+        userId = existing.id;
+      }
 
       const { data: tenant, error: tInsErr } = await supabaseAdmin
         .from("tenants")
