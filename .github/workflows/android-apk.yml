@@ -74,10 +74,12 @@ jobs:
 
       - name: Build Release APK
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Fall back to the CI keystore defaults; empty strings break Gradle signing
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'release' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
         run: ./gradlew assembleRelease --no-daemon --stacktrace
+
 
       - name: Collect APKs
         run: |
