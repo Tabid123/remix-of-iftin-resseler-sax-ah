@@ -27,7 +27,7 @@ object TenantSession {
     private const val KEY_TENANT_NAME = "tenant_name"
 
     private const val SUPABASE_URL = "https://zshzcuomdegeijqznvvu.supabase.co"
-    private val ANON_KEY = DeliveryApiClient().getAnonKey()
+    private val ANON_KEY: String by lazy { DeliveryApiClient().getAnonKey() }
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private val http = DeliveryApiClient.sharedClient
