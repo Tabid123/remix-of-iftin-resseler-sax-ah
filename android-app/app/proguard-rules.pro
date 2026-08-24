@@ -8,6 +8,8 @@
 # ============================================================
 -keep class com.iftin.delivery.SplashActivity { *; }
 -keep class com.iftin.delivery.MainActivity { *; }
+-keep class com.iftin.delivery.LoginActivity { *; }
+-keep class com.iftin.delivery.auth.** { *; }
 -keep class com.iftin.delivery.IftinDeliveryApp { *; }
 
 # Keep all services in our package (including AccessibilityService)
