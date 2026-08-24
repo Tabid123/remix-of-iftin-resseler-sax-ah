@@ -17,6 +17,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import com.iftin.delivery.auth.TenantSession
 
 class SplashActivity : ComponentActivity() {
     
@@ -34,7 +35,8 @@ class SplashActivity : ComponentActivity() {
         }
         
         Handler(Looper.getMainLooper()).postDelayed({
-            startActivity(Intent(this, MainActivity::class.java))
+            val next = if (TenantSession.isLoggedIn(this)) MainActivity::class.java else LoginActivity::class.java
+            startActivity(Intent(this, next))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }, SPLASH_DELAY_MS)
