@@ -60,19 +60,16 @@ jobs:
           STORE_PW="${KEYSTORE_PASSWORD:-android}"
           ALIAS="${KEY_ALIAS:-release}"
           KEY_PW="${KEY_PASSWORD:-android}"
-          # Verify the committed keystore actually opens; otherwise create a fresh one
-          if [ -f app/keystore/release.keystore ] && \
-             keytool -list -keystore app/keystore/release.keystore -storepass "$STORE_PW" -alias "$ALIAS" >/dev/null 2>&1; then
-            echo "Using repo keystore"
-          else
-            echo "Repo keystore unusable — generating a new one"
-            rm -f app/keystore/release.keystore
-            keytool -genkeypair -v \
-              -keystore app/keystore/release.keystore \
-              -storepass "$STORE_PW" -keypass "$KEY_PW" \
-              -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Iftin Delivery, OU=Iftin, O=Iftin, L=Mogadishu, S=Banadir, C=SO"
-          fi
+          # The committed keystore has an unknown key password — always mint a fresh one
+          echo "Generating CI signing keystore"
+          rm -f app/keystore/release.keystore
+          keytool -genkeypair -v \
+            -keystore app/keystore/release.keystore \
+            -storetype PKCS12 \
+            -storepass "$STORE_PW" -keypass "$KEY_PW" \
+            -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Iftin Delivery, OU=Iftin, O=Iftin, L=Mogadishu, S=Banadir, C=SO"
+
 
 
       - name: Build Release APK
