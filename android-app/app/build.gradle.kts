@@ -1,4 +1,4 @@
-// Build trigger: v5.7 fix Supabase project URL/key for Iftin Reseller
+// Build trigger: v5.9 fix release crash on launch (disable R8 shrinking)
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -14,8 +14,8 @@ android {
         applicationId = "com.iftininternet.reseller"
         minSdk = 23
         targetSdk = 34
-        versionCode = 28
-        versionName = "5.8"
+        versionCode = 29
+        versionName = "5.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -36,8 +36,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
